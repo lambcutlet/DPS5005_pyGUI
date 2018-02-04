@@ -16,7 +16,7 @@ Files:
   dps5005_limits.ini - text file
  
 dps_GUI.ui
-
+![](images/gui_screenshot_image.png)
 dps_GUI_program.py
 
 dps_modbus.py
