@@ -317,7 +317,7 @@ class dps_GUI(QMainWindow):
 			self.iout = ("%5.3f" % data[3])	# iout
 			
 			self.time_interval = time.time() - self.time_old
-			print self.time_interval
+			#print self.time_interval
 						
 			self.graph_X.append(self.time_interval)#len(self.graph_Y1))
 			self.graph_Y1.append(self.vout)
