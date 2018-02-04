@@ -25,8 +25,8 @@ What can it do:
 
 ## Serial port:
 * select port
-* select baud rate (must match hardware configuation)
-* select slave address (must match hardware configuation)
+* select baud rate (must match hardware configuration)
+* select slave address (must match hardware configuration)
 * Connect (status window shows 'Connected' good, 'Try again !!!' bad)
 (only tested in linux but should work with windows)
 
@@ -37,6 +37,9 @@ Select 'CSV run' to action the file. Select 'CSV clear' to remove unwanted remai
 
 ## Requirements:
 minimalmodbus library from: https://github.com/pyhys/minimalmodbus
+```
+pip install minimalmodbus
+```
 
 ## Developed with:
 * dps_GUI.ui         - QT designer v5.9.2
