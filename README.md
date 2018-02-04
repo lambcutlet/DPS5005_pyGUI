@@ -35,13 +35,11 @@ What can it do:
 File -> Open, to load pre-configured *.CSV file, it then displays number of remaining steps.
 Select 'CSV run' to action the file. Select 'CSV clear' to remove unwanted remaining steps.
 
-Files:
+## Requirements:
+minimalmodbus library from: https://github.com/pyhys/minimalmodbus
+
+## created with:
 * dps_GUI.ui         - QT designer v5.9.2
 * dps_GUI_program.py - Python 2.7.14
 * dps_modbus.py      - Python 2.7.14
 * dps5005_limits.ini - text file
-
-## dps_GUI.ui
-## dps_GUI_program.py
-## dps_modbus.py
-## dps5005_limits.ini
