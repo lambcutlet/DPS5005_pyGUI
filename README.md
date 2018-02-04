@@ -43,3 +43,14 @@ minimalmodbus library from: https://github.com/pyhys/minimalmodbus
 * dps_GUI_program.py - Python 2.7.14
 * dps_modbus.py      - Python 2.7.14
 * dps5005_limits.ini - text file
+
+## Download & run:
+```
+git clone https://github.com/lambcutlet/DPS5005_pyGUI
+```
+```
+cd DPS5005_pyGUI/source_files/
+```
+```
+python dps_GUI_program.py
+```
