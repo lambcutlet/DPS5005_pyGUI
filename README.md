@@ -38,7 +38,7 @@ Select 'CSV run' to action the file. Select 'CSV clear' to remove unwanted remai
 ## Requirements:
 minimalmodbus library from: https://github.com/pyhys/minimalmodbus
 
-## created with:
+## Developed with:
 * dps_GUI.ui         - QT designer v5.9.2
 * dps_GUI_program.py - Python 2.7.14
 * dps_modbus.py      - Python 2.7.14
