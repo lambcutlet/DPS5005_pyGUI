@@ -22,7 +22,7 @@ What can it do:
 * load and run *.CSV file (time, voltage & current)
 * Added battery charge capabilty
 
-<img src="images/gui_screenshot_image.png">
+<img src="images/gui_screenshot_image_2.png">
 
 ## Serial port:
 * select port
