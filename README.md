@@ -49,11 +49,11 @@ Li-Ion/Lipo - based CCCV using taper current as termination.
 * set 'Terminate (A)'
 * press 'Set' to load parameters then 'ON' to begin
 
-check out http://batteryuniversity.com for more information.
+Note: Termination control begins 5seconds after charge start to allow current to stabilise.
 
-note: termination control begins 5seconds after charge start to allow current to stabilise.
+Check out http://batteryuniversity.com for more information.
 
-Disclaimer: User is responsible for safety. Program allows flexibility chose your values carefully.
+Disclaimer: User is responsible for safety. Program allows flexibility choose your values carefully.
 
 ## Requirements:
 minimalmodbus library from: https://github.com/pyhys/minimalmodbus
