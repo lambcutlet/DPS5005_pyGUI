@@ -20,6 +20,7 @@ What can it do:
 * adjust brightness
 * lock hardware buttons
 * load and run *.CSV file (time, voltage & current)
+* Added battery charge capabilty
 
 <img src="images/gui_screenshot_image.png">
 
@@ -34,6 +35,21 @@ What can it do:
 'Sample.csv' is provided as an example.
 File -> Open, to load pre-configured *.CSV file, it then displays number of remaining steps.
 Select 'CSV run' to action the file. Select 'CSV clear' to remove unwanted remaining steps.
+
+## Battery Charging
+NiCad/NiMH - based on (-dV) negative delta V or better known as Peak Detect.
+* set absolute maximum safe charging voltage 'Voltage Max'
+* set 'Constant Current'
+* set 'Terminate (-dV)'
+* press 'Set' to load parameters then 'ON' to begin
+Li-Ion/Lipo - based CCCV using taper current as termination.
+* set 'Constant Voltage'
+* set 'Constant Current'
+* set 'Terminate (A)'
+* press 'Set' to load parameters then 'ON' to begin
+check out http://batteryuniversity.com for more information.
+note: termination control begins 5seconds after charge start to allow current to stabilise.
+Disclaimer: User is responsible for safety. Program allows flexibility chose your values carefully.
 
 ## Requirements:
 minimalmodbus library from: https://github.com/pyhys/minimalmodbus
