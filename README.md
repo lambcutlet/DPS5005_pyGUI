@@ -49,7 +49,7 @@ Li-Ion/Lipo - based CCCV using taper current as termination.
 * set 'Terminate (A)'
 * press 'Set' to load parameters then 'ON' to begin
 
-Note: Termination control begins 5seconds after charge start to allow current to stabilise.
+Note: Termination control begins 5seconds after charge start allowing current to stabilise.
 
 Check out http://batteryuniversity.com for more information.
 
