@@ -55,6 +55,11 @@ Check out http://batteryuniversity.com for more information.
 
 Disclaimer: User is responsible for safety. Program allows flexibility choose your values carefully.
 
+## Using other 'DPSxxxx' units
+Configuring this progam for other 'DPSxxxx' units should hopefully be straight forward to achieve by modifying the parameters within this file 'dps5005_limits.ini'. 
+* adjust the safety levels, Max/Min values
+* adjust the decimal point position
+
 ## Requirements:
 minimalmodbus library from: https://github.com/pyhys/minimalmodbus
 ```
