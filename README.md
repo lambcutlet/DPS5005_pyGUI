@@ -20,8 +20,9 @@ What can it do:
 * adjust brightness
 * lock hardware buttons
 * load and run *.CSV file (time, voltage & current)
+* Added battery charge capabilty
 
-<img src="images/gui_screenshot_image.png">
+<img src="images/gui_screenshot_image_2.png">
 
 ## Serial port:
 * select port
@@ -34,6 +35,30 @@ What can it do:
 'Sample.csv' is provided as an example.
 File -> Open, to load pre-configured *.CSV file, it then displays number of remaining steps.
 Select 'CSV run' to action the file. Select 'CSV clear' to remove unwanted remaining steps.
+
+## Battery Charging
+NiCad/NiMH - based on (-dV) negative delta V or better known as Peak Detect.
+* set absolute maximum safe charging voltage 'Voltage Max'
+* set 'Constant Current'
+* set 'Terminate (-dV)'
+* press 'Set' to load parameters then 'ON' to begin
+
+Li-Ion/Lipo - based CCCV using taper current as termination.
+* set 'Constant Voltage'
+* set 'Constant Current'
+* set 'Terminate (A)'
+* press 'Set' to load parameters then 'ON' to begin
+
+Note: Termination control begins 5seconds after charge start allowing current to stabilise.
+
+Check out http://batteryuniversity.com for more information.
+
+Disclaimer: User is responsible for safety. Program allows flexibility choose your values carefully.
+
+## Using other 'DPSxxxx' units
+Configuring this progam for other 'DPSxxxx' units should hopefully be straight forward to achieve by modifying the parameters within this file 'dps5005_limits.ini'. 
+* adjust the safety levels, Max/Min values
+* adjust the decimal point position
 
 ## Requirements:
 minimalmodbus library from: https://github.com/pyhys/minimalmodbus

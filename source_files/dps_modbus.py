@@ -12,10 +12,15 @@ class Import_limits:
 	def __init__(self, filename):
 		Config = ConfigParser.ConfigParser()
 		Config.read(filename)
-		b = Config.options('SectionOne')
+		b = Config.options('SectionOne')		# safety limits
 		for x in range(len(b)):
 			c = b[x]
-			exec("self.%s = %s" % (c, Config.get('SectionOne', c)))		
+			exec("self.%s = %s" % (c, Config.get('SectionOne', c)))	
+		
+		b = Config.options('SectionTwo')		# decimal places
+		for x in range(len(b)):
+			c = b[x]
+			exec("self.%s = %s" % (c, Config.get('SectionTwo', c)))		
 
 '''
 # original inspiration for this came from here:
@@ -51,22 +56,22 @@ class Dps5005:
 		self.limits = limits
 		
 	def voltage_set(self, RWaction='r', value=0.0):	# R/W
-		return self.function(0x00, 2, RWaction, value, self.limits.voltage_set_max, self.limits.voltage_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
+		return self.function(0x00, self.limits.decimals_vset, RWaction, value, self.limits.voltage_set_max, self.limits.voltage_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
 
 	def current_set(self, RWaction='r', value=0.0):	# R/W
-		return self.function(0x01, 3, RWaction, value, self.limits.current_set_max, self.limits.current_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
+		return self.function(0x01, self.limits.decimals_iset, RWaction, value, self.limits.current_set_max, self.limits.current_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
 
 	def voltage(self):	# R
-		return self.function(0x02, 2) 
+		return self.function(0x02, self.limits.decimals_v) 
 
 	def current(self):	# R
-		return self.function(0x03, 3)
+		return self.function(0x03, self.limits.decimals_i)
 
 	def power(self):	# R
-		return self.function(0x04, 2)
+		return self.function(0x04, self.limits.decimals_power)
 
 	def voltage_in(self):	# R
-		return self.function(0x05, 2)
+		return self.function(0x05, self.limits.decimals_vin)
 
 	def lock(self, RWaction='r', value=0):	# R/W
 		return self.function(0x06, 0, RWaction, value, self.limits.lock_set_max, self.limits.lock_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
@@ -87,7 +92,7 @@ class Dps5005:
 		return self.function(0x0B, 0)
 
 	def version(self):	# R
-		return self.function(0x0C, 1)
+		return self.function(0x0C, self.limits.decimals_version)
 
 	def extract_m(self, RWaction='r', value=0.0):	# R/W
 		return self.function(0x23, 0, RWaction, value, self.limits.extract_m_set_max, self.limits.extract_m_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
@@ -95,19 +100,19 @@ class Dps5005:
 #---		
 		
 	def voltage_set2(self, RWaction='r', value=0.0):	# R/W
-		return self.function(0x50, 2, RWaction, value, self.limits.voltage_set2_max, self.limits.voltage_set2_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(0x50, self.limits.decimals_vset, RWaction, value, self.limits.voltage_set2_max, self.limits.voltage_set2_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 			
 	def current_set2(self, RWaction='r', value=0.0):	# R/W
-		return self.function(0x51, 3, RWaction, value, self.limits.current_set2_max, self.limits.current_set2_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(0x51, self.limits.decimals_iset, RWaction, value, self.limits.current_set2_max, self.limits.current_set2_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 
 	def s_ovp(self, RWaction='r', value=0):	# R/W
-		return self.function(0x52, 2, RWaction, value, self.limits.s_ovp_set_max, self.limits.s_ovp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(0x52, self.limits.decimals_ovp, RWaction, value, self.limits.s_ovp_set_max, self.limits.s_ovp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 		
 	def s_ocp(self, RWaction='r', value=0):	# R/W
-		return self.function(0x53, 3, RWaction, value, self.limits.s_ocp_set_max, self.limits.s_ocp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(0x53, self.limits.decimals_ocp, RWaction, value, self.limits.s_ocp_set_max, self.limits.s_ocp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 
 	def s_opp(self, RWaction='r', value=0):	# R/W
-		return self.function(0x54, 1, RWaction, value, self.limits.s_opp_set_max, self.limits.s_opp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(0x54, self.limits.decimals_opp, RWaction, value, self.limits.s_opp_set_max, self.limits.s_opp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 
 	def b_led2(self, RWaction='r', value=0):	# R/W
 		return self.function(0x55, 0, RWaction, value, self.limits.b_led2_set_max, self.limits.b_led2_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
@@ -121,19 +126,19 @@ class Dps5005:
 	def read_all(self, RWaction='r', value=0.0):	# Read data as a block, much faster than individual reads
 		data = self.functions(0x00, 16, RWaction, value) # reg_addr, number of bytes, RWaction, value
 		#--- adjust values to floating points
-		data[0] = data[0] / 100.0	# voltage_set
-		data[1] = data[1] / 1000.0	# current_set
-		data[2] = data[2] / 100.0	# voltage
-		data[3] = data[3] / 1000.0	# current
-		data[4] = data[4] / 100.0	# power
-		data[5] = data[5] / 100.0	# voltage_in
-		data[12] = data[12] / 10.0	# version
+		data[0] = data[0] / float(10**self.limits.decimals_vset)	#100.0	# voltage_set
+		data[1] = data[1] / float(10**self.limits.decimals_iset)	#1000.0	# current_set
+		data[2] = data[2] / float(10**self.limits.decimals_v)	#100.0	# voltage
+		data[3] = data[3] / float(10**self.limits.decimals_i)	#1000.0	# current
+		data[4] = data[4] / float(10**self.limits.decimals_power)	#100.0	# power
+		data[5] = data[5] / float(10**self.limits.decimals_vin)	#100.0	# voltage_in
+		data[12] = data[12] / float(10**self.limits.decimals_version)	#10.0	# version
 		return data
 	
 	def write_voltage_current(self, RWaction='r', value=0):	# write voltage & current as a block
 		reg_addr = 0x00 
-		value[0] = int(value[0] * 100)
-		value[1] = int(value[1] * 1000)
+		value[0] = int(value[0] * float(10**self.limits.decimals_v))	#100.0	# voltage
+		value[1] = int(value[1] * float(10**self.limits.decimals_i))	#1000.0	# current
 		self.functions(reg_addr, 0, 'w', value)
 		
 	def write_all(self, reg_addr=0, value=0):	# write block
