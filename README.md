@@ -61,9 +61,15 @@ Configuring this progam for other 'DPSxxxx' units should hopefully be straight f
 * adjust the decimal point position
 
 ## Requirements:
-minimalmodbus library from: https://github.com/pyhys/minimalmodbus
 ```
+pip install serial
 pip install minimalmodbus
+pip install pyqt5
+pip install pyqtgraph
+```
+```
+if using python2.7 
+pip install configparser
 ```
 
 ## Developed with:
