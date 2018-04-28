@@ -1,7 +1,8 @@
 import minimalmodbus
 import time
 import csv
-import ConfigParser
+import configparser as ConfigParser
+#import ConfigParser
 
 ''' 
 import the system limit thresholds from the *.ini file.
@@ -137,8 +138,14 @@ class Dps5005:
 	
 	def write_voltage_current(self, RWaction='r', value=0):	# write voltage & current as a block
 		reg_addr = 0x00 
+		# added safety limits - any excursion results in zero
+		if value[0] > self.limits.voltage_set_max or value[0] < self.limits.voltage_set_min: 
+			value[0] = 0
 		value[0] = int(value[0] * float(10**self.limits.decimals_v))	#100.0	# voltage
+		if value[1] > self.limits.current_set_max or value[1] < self.limits.current_set_min: 
+			value[1] = 0
 		value[1] = int(value[1] * float(10**self.limits.decimals_i))	#1000.0	# current
+		
 		self.functions(reg_addr, 0, 'w', value)
 		
 	def write_all(self, reg_addr=0, value=0):	# write block
@@ -146,19 +153,34 @@ class Dps5005:
 		
 #---
 	def function(self, reg_addr=0, decimal_places=0, RWaction='r', value=0.0, max_value=0, min_value=0):
-		if value > max_value or value < min_value: value = 0.0
+		a = False
+		if value > max_value or value < min_value: 
+			value = 0.0
 		if RWaction != 'w':
-			return self.serial_data.read(reg_addr, decimal_places)
+			try:
+				a = self.serial_data.read(reg_addr, decimal_places)
+			except IOError:
+				print("Failed to read from instrument")
 		else:
-			self.serial_data.write(reg_addr, value, decimal_places) # register, value, No_of_decimal_places
-			return 
+			try:
+				self.serial_data.write(reg_addr, value, decimal_places) # register, value, No_of_decimal_places
+			except IOError:
+				print("Failed to write to instrument")
+		return(a)
 	
 	def functions(self, reg_addr=0, num_of_addr=0, RWaction='r', value=0):
+		a = False
 		if RWaction != 'w':
-			return self.serial_data.read_block(reg_addr, num_of_addr)
+			try:
+				a = self.serial_data.read_block(reg_addr, num_of_addr)
+			except IOError:
+				print("Failed to read block from instrument")
 		else:
-			self.serial_data.write_block(reg_addr, value)
-			return 
+			try:
+				self.serial_data.write_block(reg_addr, value)
+			except IOError:
+				print("Failed to write block to instrument")
+		return(a)
 	
 	def delay(self, value):
 		global time_old
@@ -179,7 +201,7 @@ class Dps5005:
 				csvReader = csv.reader(f)#, delimiter=',')	# reads file
 				next(csvReader, None)						# skips header
 				data_list = list(csvReader)
-				print data_list
+				print(data_list)
 			# initialise dps state
 				self.voltage_set('w', float(0.0))			# set voltage to zero
 				self.current_set('w', float(0.0))			# set current to zero
@@ -217,15 +239,15 @@ if __name__ == '__main__':
 				quit()
 			elif route == "read":
 				start = time.time()
-				print dps.read_all()
-				print (time.time() - start)	
+				print(dps.read_all())
+				print(time.time() - start)	
 			elif route == "write":
 				value = [23.47, 1.234]
 				dps.write_voltage_current('w', value)
 			elif route == "r":
 				start = time.time()
 				print("voltage_set :  %6.2f" % dps.voltage_set())
-				print (time.time() - start)
+				print(time.time() - start)
 				print("current_set :  %6.3f" % dps.current_set())	
 				print("voltage     :  %6.2f" % dps.voltage())
 				print("current     :  %6.2f" % dps.current())
@@ -280,14 +302,14 @@ if __name__ == '__main__':
 				dps.s_ini('w', float(value))
 			elif route == "m":	
 				for i in dir(dps):
-					print i
+					print(i)
 			elif route == "a":	
 				dps.action_csv_file('dps-control-Book1.csv')
 			else:
 				pass
 
 	except KeyboardInterrupt:  	# Ctrl+C pressed, so...
-		print "close"
+		print("close")
 	finally:
 		dps.onoff('w', 0)
 		quit()

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1071</width>
-    <height>545</height>
+    <height>509</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -169,28 +169,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="lineEdit_info">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>130</width>
-          <height>30</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>130</width>
-          <height>30</height>
-         </size>
-        </property>
-       </widget>
-      </item>
-      <item>
        <spacer name="verticalSpacer_3">
         <property name="orientation">
          <enum>Qt::Vertical</enum>
@@ -224,7 +202,7 @@
          </size>
         </property>
         <property name="text">
-         <string>Lock</string>
+         <string>Loc&amp;k</string>
         </property>
         <property name="autoExclusive">
          <bool>false</bool>
@@ -1728,7 +1706,7 @@
    </property>
    <widget class="QMenu" name="menuFile">
     <property name="title">
-     <string>File</string>
+     <string>Fi&amp;le</string>
     </property>
     <addaction name="actionOpen"/>
     <addaction name="separator"/>
@@ -1739,12 +1717,12 @@
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionOpen">
    <property name="text">
-    <string>Open</string>
+    <string>&amp;Open</string>
    </property>
   </action>
   <action name="actionExit">
    <property name="text">
-    <string>Exit</string>
+    <string>&amp;Exit</string>
    </property>
   </action>
  </widget>
