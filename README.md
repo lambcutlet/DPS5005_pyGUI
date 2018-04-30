@@ -71,6 +71,10 @@ pip install pyqtgraph
 if using python2.7 
 pip install configparser
 ```
+or
+```
+pip install -r requirements.txt 
+```
 
 ## Developed with:
 * dps_GUI.ui         - QT designer v5.9.2
