@@ -1,8 +1,10 @@
 import minimalmodbus
 import time
 import csv
-import configparser as ConfigParser
-#import ConfigParser
+try:
+	import ConfigParser
+except ImportError:
+	import configparser as ConfigParser
 
 ''' 
 import the system limit thresholds from the *.ini file.
