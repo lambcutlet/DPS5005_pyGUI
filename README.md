@@ -1,15 +1,6 @@
 # DPS5005_pyGUI
 A python GUI to display &amp; control DPS5005 power supply
 
-* Hardware: DPS5005
-* Software: v1.6
-
-Additional settings within hardware:
-* hold 'up' arrow while powering on to access interface setup area. 
-* Modbus unit ID, baud rate, BT pin etc. 
-* Press 'set' twice in succession to exit.
-- note: baud rate 2400 & 19200 does not appear to work. 4800 & 9600 OK.
-
 ## Program:
 What can it do:
 * connect to serial port
@@ -23,6 +14,16 @@ What can it do:
 * Added battery charge capabilty
 
 <img src="images/gui_screenshot_image_2.png">
+
+## Hardware:
+* Hardware: DPS5005
+* Software: v1.6
+
+Additional settings within hardware:
+* hold 'up' arrow while powering on to access interface setup area. 
+* Modbus unit ID, baud rate, BT pin etc. 
+* Press 'set' twice in succession to exit.
+- note: baud rate 2400 & 19200 does not appear to work. 4800 & 9600 OK.
 
 ## Serial port:
 * select port
@@ -60,17 +61,27 @@ Configuring this progam for other 'DPSxxxx' units should hopefully be straight f
 * adjust the safety levels, Max/Min values
 * adjust the decimal point position
 
-## Requirements:
-minimalmodbus library from: https://github.com/pyhys/minimalmodbus
-```
-pip install minimalmodbus
-```
-
 ## Developed with:
 * dps_GUI.ui         - QT designer v5.9.2
 * dps_GUI_program.py - Python 2.7.14
 * dps_modbus.py      - Python 2.7.14
 * dps5005_limits.ini - text file
+
+## Requirements:
+```
+pip install serial
+pip install minimalmodbus
+pip install pyqt5
+pip install pyqtgraph
+```
+```
+if using python2.7 
+pip install configparser
+```
+or
+```
+pip install -r requirements.txt 
+```
 
 ## Download & run:
 ```

@@ -11,18 +11,19 @@ from dps_modbus import Serial_modbus
 from dps_modbus import Dps5005
 from dps_modbus import Import_limits
 
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, QRunnable, QThreadPool, QTimer, QThread, QCoreApplication, QObject, QMutex
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QRunnable, QThreadPool, QTimer, QThread, QCoreApplication, QObject, QMutex, Qt
 from PyQt5.QtWidgets import QApplication, QMainWindow, QSlider, QAction, QFileDialog, QGraphicsView
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QFont
 from PyQt5.uic import loadUi
+QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 
 import pyqtgraph as pg
 from pyqtgraph import PlotWidget, GraphicsLayoutWidget
 import numpy as np
 
-mutex = QMutex()
+
 dps = 0
-dps_mode = 0 # 0 PSU default, 1 nicad, 2 li-ion 
+dps_mode = 0 # 0 PSU default, 1 nicad, 2 li-ion, 3 CSV, 
 
 class WorkerSignals(QObject):
 	finished = pyqtSignal()
@@ -31,19 +32,19 @@ class WorkerSignals(QObject):
 	progress = pyqtSignal(int)
 
 class Worker(QRunnable):
-    def __init__(self, fn, *args, **kwargs):
-	super(Worker, self).__init__()
-	# Store constructor arguments (re-used for processing)
-	self.fn = fn
-	self.args = args
-	self.kwargs = kwargs
-	self.signals = WorkerSignals()
+	def __init__(self, fn, *args, **kwargs):
+		super(Worker, self).__init__()
+		# Store constructor arguments (re-used for processing)
+		self.fn = fn
+		self.args = args
+		self.kwargs = kwargs
+		self.signals = WorkerSignals()
 
-	# Add the callback to our kwargs
-	kwargs['progress_callback'] = self.signals.progress
+		# Add the callback to our kwargs
+		kwargs['progress_callback'] = self.signals.progress
 
-    @pyqtSlot()
-    def run(self):
+	@pyqtSlot()
+	def run(self):
 		'''
 		Initialise the runner function with passed args, kwargs.
 		'''
@@ -63,11 +64,17 @@ class dps_GUI(QMainWindow):
 	def __init__(self):
 		super(dps_GUI,self).__init__()
 		loadUi('dps_GUI.ui', self)
-		self.setWindowTitle('DPS5005')
+		self.setWindowTitle('DPS5005_pyGUI')
+		
+		self.mutex = QMutex()
+		
+	#--- fix font style & size
+		f = QFont("Liberation Sans", 10)
+		self.setFont(f)
 		
 	#--- threading
 		self.threadpool = QThreadPool()
-	#	print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
+	#   print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 		
 	#--- globals
 		self.serialconnected = False
@@ -78,7 +85,7 @@ class dps_GUI(QMainWindow):
 		self.graph_X = []
 		self.graph_Y1 = []
 		self.graph_Y2 = []
-		self.time_old = time.time()
+		self.time_old = ""
 		
 	#--- PlotWidget
 		self.pg_plot_setup()
@@ -87,7 +94,7 @@ class dps_GUI(QMainWindow):
 		self.pushButton_save_plot.clicked.connect(self.pushButton_save_plot_clicked)
 		self.pushButton_clear.clicked.connect(self.pushButton_clear_clicked)
 	
-		self.radioButton_lock.toggled.connect(self.radioButton_lock_clicked)
+		self.radioButton_lock.clicked.connect(self.radioButton_lock_clicked)
 		self.pushButton_onoff.clicked.connect(self.pushButton_onoff_clicked)
 		self.pushButton_set.clicked.connect(self.pushButton_set_clicked)
 		self.pushButton_set_2.clicked.connect(self.pushButton_set_2_clicked)
@@ -97,8 +104,7 @@ class dps_GUI(QMainWindow):
 		self.pushButton_CSV.clicked.connect(self.pushButton_CSV_clicked)
 		self.pushButton_CSV_clear.clicked.connect(self.pushButton_CSV_clear_clicked)
 				
-		self.horizontalSlider_brightness.sliderReleased.connect(self.horizontalSlider_brightness_sliderReleased)
-		self.horizontalSlider_brightness.sliderPressed.connect(self.horizontalSlider_brightness_sliderPressed)
+		self.horizontalSlider_brightness.valueChanged.connect(self.horizontalSlider_brightness_valueChanged)
 		self.actionOpen.triggered.connect(self.file_open)
 		self.actionExit.triggered.connect(self.close)
 		
@@ -114,24 +120,25 @@ class dps_GUI(QMainWindow):
 		self.timer.setInterval(1000)
 		self.timer.timeout.connect(self.loop_function)
 
-	def closeEvent(self, event):	
-		self.shutdown()	# switch OFF output when application closes to prevent unmonitored charging
-        
+	def closeEvent(self, event):    
+		self.shutdown() # switch OFF output when application closes to prevent unmonitored charging
+		
 	def shutdown(self):
-		if self.pushButton_onoff.isChecked() == True:	
-			self.label_onoff.setText('Output      :   OFF')	# off
+		if self.pushButton_onoff.isChecked() == True:   
+			self.label_onoff.setText('Output      :   OFF') # off
 			self.pushButton_onoff.setChecked(False)
 			self.pushButton_onoff_clicked()
+			print("def shutdown")
 			
 	def pg_plot_setup(self): # right axis not connected to automatic scaling on the left ('A' icon on bottom LHD)
 		self.p1 = self.graphicsView.plotItem
-		self.p1.setClipToView(True)		
+		self.p1.setClipToView(True)     
 		
-	# x axis	
+	# x axis    
 		self.p1.setLabel('bottom', 'Time', units='s', color='g', **{'font-size':'10pt'})
 		self.p1.getAxis('bottom').setPen(pg.mkPen(color='g', width=1))
 	
-	# Y1 axis	
+	# Y1 axis   
 		self.p1.setLabel('left', 'Voltage', units='V', color='r', **{'font-size':'10pt'})
 		self.p1.getAxis('left').setPen(pg.mkPen(color='r', width=1))
 	
@@ -147,7 +154,7 @@ class dps_GUI(QMainWindow):
 		self.p1.getAxis('right').setPen(pg.mkPen(color='c', width=1))
 		
 	# scales ViewBox to scene
-		self.p1.vb.sigResized.connect(self.updateViews)	
+		self.p1.vb.sigResized.connect(self.updateViews) 
 		
 	def updateViews(self):
 		self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
@@ -155,7 +162,7 @@ class dps_GUI(QMainWindow):
 
 #--- update graph
 	def update_graph_plot(self):
-		start = time.time()	
+		start = time.time() 
 		X = np.asarray(self.graph_X, dtype=np.float32)
 		Y1 = np.asarray(self.graph_Y1, dtype=np.float32)
 		Y2 = np.asarray(self.graph_Y2, dtype=np.float32)
@@ -180,7 +187,7 @@ class dps_GUI(QMainWindow):
 		if filename[0] != '':
 			self.CSV_file = filename[0]
 		if self.CSV_file != '':
-			self.open_CSV(self.CSV_file)	
+			self.open_CSV(self.CSV_file)    
 	
 	def file_save(self):
 		filename, _ = QFileDialog.getSaveFileName(self, "Save File", datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")+".csv", "All Files (*);; CSV Files (*.csv)")
@@ -207,7 +214,7 @@ class dps_GUI(QMainWindow):
 	def pushButton_save_plot_clicked(self):
 		self.file_save()
 
-	def pushButton_clear_clicked(self):	
+	def pushButton_clear_clicked(self): 
 		self.graph_X = []
 		self.graph_Y1 = []
 		self.graph_Y2 = []
@@ -217,24 +224,32 @@ class dps_GUI(QMainWindow):
 		
 	def radioButton_lock_clicked(self):
 		if self.radioButton_lock.isChecked():
-			value = 1
+			self.pass_2_thread(self.lock_on_change)
 		else:
-			value = 0
-		self.pass_2_dps('lock', 'w', str(value))
+			self.pass_2_thread(self.lock_off_change)
+		
+	# pass_2_thread - radioButton_lock_clicked
+	def lock_on_change(self, progress_callback):
+		self.pass_2_dps('lock', 'w', str(1))
+	def lock_off_change(self, progress_callback):
+		self.pass_2_dps('lock', 'w', str(0))
 
 	def pushButton_onoff_clicked(self):
 		if self.pushButton_onoff.isChecked():
-			value = 1
-			self.pushButton_onoff.setText("ON")
 			self.pushButton_on_start_time = time.time()
+			self.pass_2_thread(self.on_change)
 		else:
-			value = 0
-			self.pushButton_onoff.setText("OFF")
 			self.pushButton_on_start_time = 0
-		self.pass_2_dps('onoff', 'w', str(value))
-	
+			self.pass_2_thread(self.off_change)
+		
+	# pass_2_thread - pushButton_onoff_clicked
+	def on_change(self, progress_callback):
+		self.pass_2_dps('onoff', 'w', str(1))
+	def off_change(self, progress_callback):
+		self.pass_2_dps('onoff', 'w', str(0))
+		
 	# PSU mode - import values
-	def pushButton_set_clicked(self):					
+	def pushButton_set_clicked(self):                   
 		if self.lineEdit_vset.text() != '' or self.lineEdit_iset.text() != '':
 			try:
 				value1 = float(self.lineEdit_vset.text())
@@ -251,119 +266,125 @@ class dps_GUI(QMainWindow):
 			self.pass_2_dps('write_voltage_current', 'w', [value1, value2])
 	
 	# Nicad mode - import values
-	def pushButton_set_2_clicked(self):					
+	def pushButton_set_2_clicked(self):                 
 		if self.lineEdit_vset_2.text() != '' or self.lineEdit_iset_2.text() != '' or self.lineEdit_term_2.text() != '':
 			try:
-				value1 = float(self.lineEdit_vset_2.text())
+				value1 = abs(float(self.lineEdit_vset_2.text()))	# added abs() to prevent applying incorrect sign
 			except ValueError:
 				self.lineEdit_vset_2.setText("Number ?")
 				return
 			try:
-				value2 = float(self.lineEdit_iset_2.text())
+				value2 = abs(float(self.lineEdit_iset_2.text()))
 			except ValueError:
 				self.lineEdit_iset_2.setText("Number ?")
 				return
 			try:
-				value3 = float(self.lineEdit_term_2.text())
+				value3 = abs(float(self.lineEdit_term_2.text()))
 			except ValueError:
 				self.lineEdit_term_2.setText("Number ?")
 				return
 			global dps_mode
 			dps_mode = 1
 			self.v_terminate = value3
+			print(self.v_terminate)
 			self.v_peak = 0
 			self.pass_2_dps('write_voltage_current', 'w', [value1, value2])
 	
 	# Li-ion mode - import values
-	def pushButton_set_3_clicked(self):					
+	def pushButton_set_3_clicked(self):                 
 		if self.lineEdit_vset_3.text() != '' or self.lineEdit_iset_3.text() != '' or self.lineEdit_term_3.text() != '':
 			try:
-				value1 = float(self.lineEdit_vset_3.text())
+				value1 = abs(float(self.lineEdit_vset_3.text()))	# added abs() to prevent applying incorrect sign
 			except ValueError:
 				self.lineEdit_vset_3.setText("Number ?")
 				return
 			try:
-				value2 = float(self.lineEdit_iset_3.text())
+				value2 = abs(float(self.lineEdit_iset_3.text()))
 			except ValueError:
 				self.lineEdit_iset_3.setText("Number ?")
 				return
 			try:
-				value3 = float(self.lineEdit_term_3.text())
+				value3 = abs(float(self.lineEdit_term_3.text()))	
 			except ValueError:
 				self.lineEdit_term_3.setText("Number ?")
 				return
 			global dps_mode
 			dps_mode = 2
 			self.i_terminate = value3
-			self.pass_2_dps('write_voltage_current', 'w', [value1, value2])
-			
+			self.pass_2_dps('write_voltage_current', 'w', [value1, value2])		
 			
 	def pushButton_connect_clicked(self):
 		if self.pushButton_connect.isChecked():
 			self.serial_connect()
 			self.initial_state = True
 		else:
-			self.serial_disconnect()
+			self.serial_disconnect("Disconnected")
 	
 	def pushButton_CSV_clicked(self):
-		if self.CSV_list != '':
-			self.action_CSV()
+		if len(self.CSV_list) > 0:
+			global dps_mode
+			dps_mode = 3		# set to CSV mode
+			self.timer2.start()	# begin 
 	
 	def pushButton_CSV_clear_clicked(self):
-		self.CSV_list = []
-		self.timer2.stop()
-		self.label_CSV.setText("Steps remaining: %2d" % len(self.CSV_list))
+		self.stop_CSV()
 
-#--- import CSV file		
+#--- import CSV file        
 	def open_CSV(self, filename):
 		with open(filename, 'r') as f:
-			csvReader = csv.reader(f)#, delimiter=',')	# reads file
-			next(csvReader, None)						# skips header
+			csvReader = csv.reader(f)#, delimiter=',')  # reads file
+			next(csvReader, None)                       # skips header
 			data_list = list(csvReader)
 			self.CSV_list = data_list
-		self.labelCSV(len(self.CSV_list))	
+		self.labelCSV(len(self.CSV_list))   
 				
-	def labelCSV(self, value):			# display remaining steps
-		self.label_CSV.setText("Steps remaining: %2d" % value)
+	def labelCSV(self, value):          # display remaining steps
+		self.label_CSV.setText("Steps remaining: %3d" % value)
 
-#--- action the imported CSV using timer2		
+#--- action the imported CSV using timer2       
 	def action_CSV(self):
-		if self.pushButton_onoff.isChecked() == True:	
+		if self.pushButton_onoff.isChecked() == True: 
+			global dps_mode
+			if dps_mode != 3:
+				return  
 			if len(self.CSV_list) > 0:
-				self.label_CSV.setText("Steps remaining: %2d" % len(self.CSV_list))
 				data_list = self.CSV_list
 				
-				if len(self.CSV_list) > 1:
+				if len(self.CSV_list) > 1:			# calculate step time interval
 					value0 = float(data_list[1][0]) - float(data_list[0][0])
 				else:
 					value0 = 0
+				
+				# set Voltage/Current levels
 				value1 = float(data_list[0][1])
 				value2 = float(data_list[0][2])
-				
 				self.pass_2_dps('write_voltage_current', 'w', [value1, value2])
 				
 				data_list.pop(0)
 				self.timer2.stop()
 				self.timer2.setInterval(value0*1000)
 				self.timer2.start()
-				self.label_CSV.setText("Steps remaining: %2d" % len(self.CSV_list))
+				self.labelCSV(len(self.CSV_list)) 	# display No. of remaining steps
 			else:
-				self.timer2.stop()
+				self.stop_CSV()
+
+	def stop_CSV(self):
+		self.timer2.stop()
+		self.CSV_list = []
+		self.labelCSV(len(self.CSV_list)) 
+		global dps_mode
+		dps_mode = 0	# return to PSU mode
 		
-#--- slider	
-	def horizontalSlider_brightness_sliderPressed(self):
-		self.slider_in_use = True
-		
-	def horizontalSlider_brightness_sliderReleased(self):
+#--- slider 
+	def horizontalSlider_brightness_valueChanged(self):
 		self.pass_2_thread(self.slider_change)
-		self.slider_in_use = False
-		
+	
+	# pass_2_thread - horizontalSlider_brightness_valueChanged
 	def slider_change(self, progress_callback):
 		value = self.horizontalSlider_brightness.value()
 		self.pass_2_dps('b_led', 'w', str(value))
-		self.label_brightness.setText('Brightness Level: %s' % value)
 
-#--- thread the needle	
+#--- thread the needle  
 	def pass_2_thread(self, func):
 		# Pass the function to execute
 		worker = Worker(func) # Any other args, kwargs are passed to the run function
@@ -374,10 +395,13 @@ class dps_GUI(QMainWindow):
 
 #--- loop is actioned from timer1, reading data & controlling charging  
 	def loop_function(self):
-		self.read_all()
-		self.operating_mode()
+		try:
+			self.read_all()
+			self.operating_mode()
+		except:
+			self.serial_disconnect("Disconnected")
 		
-#--- operating mode	
+#--- operating mode 
 	def operating_mode(self):
 		global dps_mode
 		value = dps_mode
@@ -385,57 +409,50 @@ class dps_GUI(QMainWindow):
 			self.label_operating_mode.setText('PSU')
 		elif value == 1:
 			self.label_operating_mode.setText('NiCad')
-			if float(self.vout) > float(self.v_peak):	# find peak voltage
+			if float(self.vout) > float(self.v_peak):   # find peak voltage
 				self.v_peak = float(self.vout)
-			if self.pushButton_onoff.isChecked() and (time.time() - self.pushButton_on_start_time > 5):	# adds 5sec delay, to prevent immediate switch OFF
-				if float(self.vout) <= (self.v_peak - float(self.v_terminate)):		# switch off output
+			if self.pushButton_onoff.isChecked() and (time.time() - self.pushButton_on_start_time > 5): # adds 5sec delay, to prevent immediate switch OFF
+				if float(self.vout) <= (self.v_peak - float(self.v_terminate)):     # switch off output
 					self.pushButton_onoff.setChecked(False)
 					self.pushButton_onoff_clicked()
 		elif value == 2:
 			self.label_operating_mode.setText('Li-Ion')
-			if self.pushButton_onoff.isChecked() and (time.time() - self.pushButton_on_start_time > 5):	# adds 5sec delay, to prevent immediate switch OFF	
-				if float(self.iout) <= float(self.i_terminate):			# switch off output
+			if self.pushButton_onoff.isChecked() and (time.time() - self.pushButton_on_start_time > 5): # adds 5sec delay, to prevent immediate switch OFF  
+				if float(self.iout) <= float(self.i_terminate):         # switch off output
 					self.pushButton_onoff.setChecked(False)
 					self.pushButton_onoff_clicked()
+		elif value == 3:
+			self.label_operating_mode.setText('CSV')
 		else:
 			self.label_operating_mode.setText('Invalid')
 
-#--- read & display values from DPS	
+#--- read & display values from DPS 
 	def read_all(self):
-		start = time.time()
 		data = self.pass_2_dps('read_all')
-		if data != False:		
-			self.vout = ("%5.2f" % data[2])	# vout
-			self.iout = ("%5.3f" % data[3])	# iout
+		if data != False:       
+			self.vout = ("%5.2f" % data[2]) # vout
+			self.iout = ("%5.3f" % data[3]) # iout
 			
-			self.time_interval = time.time() - self.time_old
-			#print self.time_interval
-						
-			self.graph_X.append(self.time_interval)#len(self.graph_Y1))
-			self.graph_Y1.append(self.vout)
-			self.graph_Y2.append(self.iout)
+			self.time_interval = time.time() - self.time_old					
+			self.graph_X.append(self.time_interval)		# Xaxis  - time interval
+			self.graph_Y1.append(self.vout)				# Y1axis - voltage
+			self.graph_Y2.append(self.iout)				# Y2axis - current
 			
 			self.update_graph_plot()
 			
-			self.lcdNumber_vset.display("%5.2f" % data[0])	# vset
-			self.lcdNumber_iset.display("%5.3f" % data[1])	# iset
-			self.lcdNumber_vout.display(self.vout)	# vout
-			self.lcdNumber_iout.display(self.iout)	# iout
+			self.lcdNumber_vset.display("%5.2f" % data[0])  # vset
+			self.lcdNumber_iset.display("%5.3f" % data[1])  # iset
+			self.lcdNumber_vout.display(self.vout)  # vout
+			self.lcdNumber_iout.display(self.iout)  # iout
 			
-			self.lcdNumber_pout.display("%5.2f" % data[4])	# power
-			self.lcdNumber_vin.display("%5.2f" % data[5])		# vin
+			self.lcdNumber_pout.display("%5.2f" % data[4])  # power
+			self.lcdNumber_vin.display("%5.2f" % data[5])       # vin
 		# lock
 			value = data[6]
-			if value == 1 and self.radioButton_lock.isChecked() == True:
-				pass
-			elif value == 1 and self.radioButton_lock.isChecked() == False:	
+			if value == 1:
 				self.radioButton_lock.setChecked(True)
-				self.radioButton_lock_clicked()
-			elif value == 0 and self.radioButton_lock.isChecked() == True:	
+			else:
 				self.radioButton_lock.setChecked(False)
-				self.radioButton_lock_clicked()
-			elif value == 0 and self.radioButton_lock.isChecked() == False:
-				pass
 				
 		# protection
 			value = data[7]
@@ -448,65 +465,60 @@ class dps_GUI(QMainWindow):
 			else:
 				self.label_protect.setText('Protection :   OK')
 		
-		# cv/cc	
+		# cv/cc 
 			if data[8] == 1:
 				self.label_cccv.setText('Mode        :   CC')
 			else:
 				self.label_cccv.setText('Mode        :   CV')
 
-		# on/off	
+		# on/off    
 			value = data[9]
-			if value == 1 and self.pushButton_onoff.isChecked() == True:
-				self.label_onoff.setText('Output      :   ON')	# on/off
-			elif value == 1 and self.pushButton_onoff.isChecked() == False:	
-				self.label_onoff.setText('Output      :   ON')	# on/off
+			if value == 1:
+				self.label_onoff.setText('Output      :   ON')  # on/off
 				self.pushButton_onoff.setChecked(True)
-				self.pushButton_onoff_clicked()
-			elif value == 0 and self.pushButton_onoff.isChecked() == True:	
-				self.label_onoff.setText('Output      :   OFF')	# on/off
+				self.pushButton_onoff.setText("ON")
+			else:
+				self.label_onoff.setText('Output      :   OFF') # on/off
 				self.pushButton_onoff.setChecked(False)
-				self.pushButton_onoff_clicked()
-			elif value == 0 and self.pushButton_onoff.isChecked() == False:
-				self.label_onoff.setText('Output      :   OFF')	# on/off
-		# slider	
-			if self.slider_in_use == False:							# update when not in use
-				value = int(data[10])
-				self.horizontalSlider_brightness.setValue(value)	# brightness
-				self.label_brightness.setText('Brightness Level:   %s' % value)
-			self.label_model.setText("Model       :   %s" % data[11])	# model
+				self.pushButton_onoff.setText("OFF")
+
+		# slider    
+			value = int(data[10])
+			self.horizontalSlider_brightness.setValue(value)    # brightness
+			self.label_brightness.setText('Brightness Level:   %s' % value)
 			
-			self.label_version.setText("Version     :   %s" % data[12])	# version
-	#		self.lcdNumber_iout.display(data[13])	# extract_m
-	#		self.lcdNumber_iout.display(data[14])	# iout
-	#		self.lcdNumber_iout.display(data[15])	# iout
-		a = (time.time() - start) * 1000.0
-		self.label_data_rate.setText("Data Rate : %6.3fms" % a)
+			self.label_model.setText("Model       :   %s" % data[11])   # model
+			self.label_version.setText("Version     :   %s" % data[12]) # version
+	#       self.lcdNumber_iout.display(data[13])   # extract_m
+	#       self.lcdNumber_iout.display(data[14])   # iout
+	#       self.lcdNumber_iout.display(data[15])   # iout
 
 #--- send commands to dps 
 	def pass_2_dps(self, function, cmd = "r", value = 0):
+		a = False
 		if self.serialconnected != False:
-			mutex.lock()
+			start = time.time()
+			self.mutex.lock()
 			a = eval("dps.%s('%s', %s)" % (function, cmd, value))
-			mutex.unlock()
-			return(a)
-		return False
+			self.mutex.unlock()
+			self.label_data_rate.setText("Data Rate : %6.3fms" % ((time.time() - start) * 1000.0)) # display rate of serial comms
+		return(a)
 		
-#--- serial selection setup	      
+#--- serial selection setup       
 	def combobox_ports_read(self):
 		return self.comboBox_ports.currentText()
 	
 	def combobox_datarate_read(self):
 		return self.comboBox_datarate.currentText()
-				    
-	def combobox_populate(self):		# collects info on startup
+					
+	def combobox_populate(self):        # collects info on startup
 		self.comboBox_ports.clear()
-		self.comboBox_ports.addItems(self.serial_ports())
-		
+		self.comboBox_ports.addItems(self.scan_serial_ports())		
 		self.comboBox_datarate.clear()
-		self.comboBox_datarate.addItems(["9600", "2400", "4800", "19200"])	# note: 2400 & 19200 doesn't seem to work
+		self.comboBox_datarate.addItems(["9600", "2400", "4800", "19200"])  # note: 2400 & 19200 doesn't seem to work
 
-#--- serial port stuff	
-	def serial_ports(self):
+#--- serial port stuff  
+	def scan_serial_ports(self):
 		if sys.platform.startswith('win'):
 			ports = ['COM%s' % (i + 1) for i in range(256)]
 		elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
@@ -521,6 +533,7 @@ class dps_GUI(QMainWindow):
 		for port in ports:
 			try:
 				s = serial.Serial(port)
+				s.flush()
 				s.close()
 				result.append(port)
 			except (OSError, serial.SerialException):
@@ -528,29 +541,34 @@ class dps_GUI(QMainWindow):
 		return result
 		
 	def serial_connect(self):
-		port = str(self.combobox_ports_read())
-		baudrate = int(self.combobox_datarate_read())
-		slave_addr = int(self.lineEdit_slave_addr.text())
+		self.serialconnected = False
 		try:
+			port = str(self.combobox_ports_read())
+			baudrate = int(self.combobox_datarate_read())
+			slave_addr = int(self.lineEdit_slave_addr.text())
 			limits = Import_limits("dps5005_limits.ini")
 			ser = Serial_modbus(port, slave_addr, baudrate, 8)
 			global dps
 			dps = Dps5005(ser, limits) #'/dev/ttyUSB0', 1, 9600, 8)
 			if dps.version() != '':
 				self.serialconnected = True
-				self.lineEdit_info.setText("Connected")
+				self.pushButton_connect.setText("Connected")
 				self.timer.start()
+				if self.time_old == "":
+					self.time_old = time.time()
 		except Exception as detail:
-			print datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error ", detail
-			self.serialconnected = False
-			self.lineEdit_info.setText("Try again !!!")
-			self.pushButton_connect.setChecked(False)
+			print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error - ", detail)
+			self.serial_disconnect("Try again !!!")
 		
-	def serial_disconnect(self):
+	def serial_disconnect(self, status):
 		self.shutdown()
 		self.serialconnected = False
+		self.mutex.unlock()
 		self.timer.stop()
-		self.lineEdit_info.setText("Disconnected")
+		self.pushButton_connect.setText(status)
+		self.pushButton_connect.setChecked(False)
+		self.combobox_populate()
+		print(status)
 			
 app = QApplication(sys.argv)
 widget = dps_GUI()
