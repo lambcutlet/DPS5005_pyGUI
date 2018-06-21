@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1071</width>
-    <height>509</height>
+    <height>473</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -39,28 +39,6 @@
     </item>
     <item row="0" column="0" rowspan="5">
      <layout class="QVBoxLayout" name="verticalLayout">
-      <item>
-       <widget class="QComboBox" name="comboBox_ports">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>130</width>
-          <height>30</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>130</width>
-          <height>30</height>
-         </size>
-        </property>
-       </widget>
-      </item>
       <item>
        <widget class="QComboBox" name="comboBox_datarate">
         <property name="sizePolicy">
@@ -501,7 +479,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButton_clear">
+         <widget class="QPushButton" name="pushButton_clear_plot">
           <property name="text">
            <string>Clear</string>
           </property>
@@ -520,6 +498,13 @@
        <widget class="QLabel" name="label_data_rate">
         <property name="text">
          <string>Datarate</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_capacity">
+        <property name="text">
+         <string>Capacity</string>
         </property>
        </widget>
       </item>
@@ -1710,7 +1695,7 @@
     </property>
     <addaction name="actionOpen"/>
     <addaction name="separator"/>
-    <addaction name="actionExit"/>
+    <addaction name="actionQuit"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
@@ -1720,9 +1705,9 @@
     <string>&amp;Open</string>
    </property>
   </action>
-  <action name="actionExit">
+  <action name="actionQuit">
    <property name="text">
-    <string>&amp;Exit</string>
+    <string>&amp;Quit</string>
    </property>
   </action>
  </widget>
