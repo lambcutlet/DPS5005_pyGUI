@@ -20,7 +20,6 @@ QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 import pyqtgraph as pg
 import numpy as np
 
-
 dps = 0
 dps_mode = 0 # 0 PSU default, 1 nicad, 2 li-ion, 3 CSV, 
 
@@ -61,8 +60,13 @@ class Worker(QRunnable):
 
 class dps_GUI(QMainWindow):
 	def __init__(self):
+		self.limits = Import_limits("dps5005_limits.ini")
+			
+		pg.setConfigOption('background', self.limits.background_colour)
+			
 		super(dps_GUI,self).__init__()
 		loadUi('dps_GUI.ui', self)
+		
 		self.setWindowTitle('DPS5005_pyGUI')
 		
 		self.mutex = QMutex()
@@ -70,6 +74,9 @@ class dps_GUI(QMainWindow):
 	#--- fix font style & size, mainly for HighDpiScaling
 		f = QFont("Liberation Sans", 10)
 		self.setFont(f)
+	
+	#--- PlotWidget
+		self.pg_plot_setup()
 		
 	#--- threading
 		self.threadpool = QThreadPool()
@@ -86,10 +93,6 @@ class dps_GUI(QMainWindow):
 		self.time_old = ""
 		self.capacity_time_old = ""
 		self.capacity = 0.0
-		
-		
-	#--- PlotWidget
-		self.pg_plot_setup()
 		
 	#--- connect signals + keyboard shortcuts + status tips
 		self.pushButton_save_plot.clicked.connect(self.pushButton_save_plot_clicked)
@@ -150,14 +153,15 @@ class dps_GUI(QMainWindow):
 	def pg_plot_setup(self): # right axis not connected to automatic scaling on the left ('A' icon on bottom LHD)
 		self.p1 = self.graphicsView.plotItem
 		self.p1.setClipToView(True)     
-		
+
 	# x axis    
-		self.p1.setLabel('bottom', 'Time', units='s', color='g', **{'font-size':'10pt'})
-		self.p1.getAxis('bottom').setPen(pg.mkPen(color='g', width=1))
+		self.p1.setLabel('bottom', 'Time', units='s', color=self.limits.x_colour, **{'font-size':'10pt'})
+		self.p1.getAxis('bottom').setPen(pg.mkPen(color=self.limits.x_colour, width=self.limits.x_pen_weight))
 	
 	# Y1 axis   
-		self.p1.setLabel('left', 'Voltage', units='V', color='r', **{'font-size':'10pt'})
-		self.p1.getAxis('left').setPen(pg.mkPen(color='r', width=1))
+		self.p1.setLabel('left', 'Voltage', units='V', color=self.limits.y1_colour, **{'font-size':'10pt'})
+		self.pen_Y1 = pg.mkPen(color=self.limits.y1_colour, width=self.limits.y1_pen_weight)
+		self.p1.getAxis('left').setPen(self.pen_Y1)
 	
 	# setup viewbox for right hand axis
 		self.p2 = pg.ViewBox()
@@ -167,11 +171,12 @@ class dps_GUI(QMainWindow):
 		self.p2.setXLink(self.p1)
 
 	# Y2 axis
-		self.p1.setLabel('right', 'Current', units="A", color='c', **{'font-size':'10pt'})
-		self.p1.getAxis('right').setPen(pg.mkPen(color='c', width=1))
+		self.p1.setLabel('right', 'Current', units="A", color=self.limits.y2_colour, **{'font-size':'10pt'})
+		self.pen_Y2 = pg.mkPen(color=self.limits.y2_colour, width=self.limits.y1_pen_weight)
+		self.p1.getAxis('right').setPen(self.pen_Y2)
 		
 	# scales ViewBox to scene
-		self.p1.vb.sigResized.connect(self.updateViews) 
+		self.p1.vb.sigResized.connect(self.updateViews) 	
 		
 	def updateViews(self):
 		self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
@@ -183,15 +188,12 @@ class dps_GUI(QMainWindow):
 		X = np.asarray(self.graph_X, dtype=np.float32)
 		Y1 = np.asarray(self.graph_Y1, dtype=np.float32)
 		Y2 = np.asarray(self.graph_Y2, dtype=np.float32)
-	
-		pen1=pg.mkPen(color='r',width=1.0)
-		pen2=pg.mkPen(color='c',width=1.0)
 
 		self.p1.clear()
 		self.p2.clear()
 		
-		self.p1.plot(X,Y1,pen=pen1, name="V")
-		self.p2.addItem(pg.PlotCurveItem(X,Y2,pen=pen2, name="I"))
+		self.p1.plot(X,Y1,pen=self.pen_Y1, name="V")
+		self.p2.addItem(pg.PlotCurveItem(X,Y2,pen=self.pen_Y2, name="I"))
 
 		app.processEvents()
 		
@@ -576,10 +578,10 @@ class dps_GUI(QMainWindow):
 				try:
 					baudrate = abs(int(self.combobox_datarate_read()))
 					slave_addr = abs(int(self.lineEdit_slave_addr.text()))
-					limits = Import_limits("dps5005_limits.ini")
+			#		self.limits = Import_limits("dps5005_limits.ini")
 					ser = Serial_modbus(port, slave_addr, baudrate, 8)
 					global dps
-					dps = Dps5005(ser, limits) #example '/dev/ttyUSB0', 1, 9600, 8)
+					dps = Dps5005(ser, self.limits) #example '/dev/ttyUSB0', 1, 9600, 8)
 					if dps.version() != '':
 						self.serialconnected = True
 						self.pushButton_connect.setText("Connected")
