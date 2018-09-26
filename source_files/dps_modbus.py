@@ -1,6 +1,7 @@
 import minimalmodbus
 import time
 import csv
+
 try:
 	import ConfigParser
 except ImportError:
@@ -23,7 +24,12 @@ class Import_limits:
 		b = Config.options('SectionTwo')		# decimal places
 		for x in range(len(b)):
 			c = b[x]
-			exec("self.%s = %s" % (c, Config.get('SectionTwo', c)))		
+			exec("self.%s = %s" % (c, Config.get('SectionTwo', c)))
+		
+		b = Config.options('SectionThree')		# plot colours
+		for x in range(len(b)):
+			c = b[x]
+			exec("self.%s = %s" % (c, Config.get('SectionThree', c)))			
 
 '''
 # original inspiration for this came from here:

@@ -1,5 +1,5 @@
-serial==0.0.62
-MinimalModbus==0.7
-PyQt5==5.10.1
-pyqtgraph==0.10.0
-configparser==3.5.0
+serial>=0.0.64
+MinimalModbus>=0.7
+PyQt5>=5.10.1
+pyqtgraph>=0.10.0
+
