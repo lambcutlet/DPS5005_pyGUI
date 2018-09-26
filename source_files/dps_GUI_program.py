@@ -159,8 +159,7 @@ class dps_GUI(QMainWindow):
 	# x axis    
 		self.p1.setLabel('bottom', 'Time', units='s', color=self.limits.x_colour, **{'font-size':'10pt'})
 		self.p1.getAxis('bottom').setPen(pg.mkPen(color=self.limits.x_colour, width=self.limits.x_pen_weight))
-		
-		
+
 	# Y1 axis   
 		self.p1.setLabel('left', 'Voltage', units='V', color=self.limits.y1_colour, **{'font-size':'10pt'})
 		self.pen_Y1 = pg.mkPen(color=self.limits.y1_colour, width=self.limits.y1_pen_weight)
@@ -179,7 +178,7 @@ class dps_GUI(QMainWindow):
 		self.p1.getAxis('right').setPen(self.pen_Y2)
 		
 	# scales ViewBox to scene
-		self.p1.vb.sigResized.connect(self.updateViews) 
+		self.p1.vb.sigResized.connect(self.updateViews) 	
 		
 		
 	def updateViews(self):
@@ -491,7 +490,7 @@ class dps_GUI(QMainWindow):
 			self.label_operating_mode.setText('CSV')
 		else:
 			self.label_operating_mode.setText('Invalid')
-	
+
 	def accrued_capacity(self, current):
 		if self.capacity_time_old != '':
 			self.capacity_time_current = time.time()
