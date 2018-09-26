@@ -1,9 +1,9 @@
 import traceback, sys
-import subprocess
+#import subprocess
 import glob
 import serial
 import time
-import os
+#import os
 import csv
 import datetime
 
@@ -18,9 +18,7 @@ from PyQt5.uic import loadUi
 QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 
 import pyqtgraph as pg
-from pyqtgraph import PlotWidget, GraphicsLayoutWidget
 import numpy as np
-
 
 dps = 0
 dps_mode = 0 # 0 PSU default, 1 nicad, 2 li-ion, 3 CSV, 
@@ -62,15 +60,23 @@ class Worker(QRunnable):
 
 class dps_GUI(QMainWindow):
 	def __init__(self):
+		self.limits = Import_limits("dps5005_limits.ini")
+			
+		pg.setConfigOption('background', self.limits.background_colour)
+			
 		super(dps_GUI,self).__init__()
 		loadUi('dps_GUI.ui', self)
+		
 		self.setWindowTitle('DPS5005_pyGUI')
 		
 		self.mutex = QMutex()
 		
-	#--- fix font style & size
+	#--- fix font style & size, mainly for HighDpiScaling
 		f = QFont("Liberation Sans", 10)
 		self.setFont(f)
+	
+	#--- PlotWidget
+		self.pg_plot_setup()
 		
 	#--- threading
 		self.threadpool = QThreadPool()
@@ -79,35 +85,49 @@ class dps_GUI(QMainWindow):
 	#--- globals
 		self.serialconnected = False
 		self.slider_in_use = False
-		self.initial_state = True
 		self.CSV_file = ''
 		self.CSV_list = []
 		self.graph_X = []
 		self.graph_Y1 = []
 		self.graph_Y2 = []
 		self.time_old = ""
+		self.capacity_time_old = ""
+		self.capacity = 0.0
 		
-	#--- PlotWidget
-		self.pg_plot_setup()
-			
-	#--- connect signals
+	#--- connect signals + keyboard shortcuts + status tips
 		self.pushButton_save_plot.clicked.connect(self.pushButton_save_plot_clicked)
-		self.pushButton_clear.clicked.connect(self.pushButton_clear_clicked)
-	
+		self.pushButton_save_plot.setShortcut(Qt.CTRL | Qt.Key_S)					# 'Save Plot' - save file/plot *.csv
+		self.pushButton_save_plot.setStatusTip('Save Plot - CTRL+S')
+		
+		self.pushButton_clear_plot.clicked.connect(self.pushButton_clear_plot_clicked)
+		self.pushButton_clear_plot.setShortcut(Qt.CTRL | Qt.Key_L)					# 'Clear' - clear/new plot
+		self.pushButton_clear_plot.setStatusTip('Clear Plot - CTRL+L')
+		
 		self.radioButton_lock.clicked.connect(self.radioButton_lock_clicked)
-		self.pushButton_onoff.clicked.connect(self.pushButton_onoff_clicked)
-		self.pushButton_set.clicked.connect(self.pushButton_set_clicked)
-		self.pushButton_set_2.clicked.connect(self.pushButton_set_2_clicked)
-		self.pushButton_set_3.clicked.connect(self.pushButton_set_3_clicked)
-		self.pushButton_connect.clicked.connect(self.pushButton_connect_clicked)
+		self.radioButton_lock.setShortcut(Qt.CTRL | Qt.ALT | Qt.Key_L)				# 'Lock' - toggle status
+		self.radioButton_lock.setStatusTip('Toggle Lock - CTRL+ALT+L')
+			
+		self.pushButton_onoff.clicked.connect(self.pushButton_onoff_clicked)		# On / Off
 		
-		self.pushButton_CSV.clicked.connect(self.pushButton_CSV_clicked)
-		self.pushButton_CSV_clear.clicked.connect(self.pushButton_CSV_clear_clicked)
-				
+		self.pushButton_set.clicked.connect(self.pushButton_set_clicked)			# 'Set' - PSU
+		self.pushButton_set_2.clicked.connect(self.pushButton_set_2_clicked)		# 'Set' - NiMH/NiCad
+		self.pushButton_set_3.clicked.connect(self.pushButton_set_3_clicked)		# 'Set' - Li-Ion/Lipo
+		
+		self.pushButton_connect.clicked.connect(self.pushButton_connect_clicked)	# 'Connect'
+		
+		self.pushButton_CSV.clicked.connect(self.pushButton_CSV_clicked)			# 'CSV run'
+		self.pushButton_CSV_clear.clicked.connect(self.pushButton_CSV_clear_clicked)# 'CSV clear'
+		
 		self.horizontalSlider_brightness.valueChanged.connect(self.horizontalSlider_brightness_valueChanged)
-		self.actionOpen.triggered.connect(self.file_open)
-		self.actionExit.triggered.connect(self.close)
 		
+		self.actionOpen.triggered.connect(self.file_open)
+		self.actionOpen.setShortcut(Qt.CTRL | Qt.Key_O)								# File -> Open - open file *.csv
+		self.actionOpen.setStatusTip('File Open - CTRL+O')
+			
+		self.actionQuit.triggered.connect(self.close)
+		self.actionQuit.setShortcut(Qt.CTRL | Qt.Key_Q)								# File -> Quit - quit application
+		self.actionQuit.setStatusTip('Quit application - CTRL+Q')
+	
 	#--- do once on startup
 		self.combobox_populate()
 
@@ -133,14 +153,15 @@ class dps_GUI(QMainWindow):
 	def pg_plot_setup(self): # right axis not connected to automatic scaling on the left ('A' icon on bottom LHD)
 		self.p1 = self.graphicsView.plotItem
 		self.p1.setClipToView(True)     
-		
+
 	# x axis    
-		self.p1.setLabel('bottom', 'Time', units='s', color='g', **{'font-size':'10pt'})
-		self.p1.getAxis('bottom').setPen(pg.mkPen(color='g', width=1))
+		self.p1.setLabel('bottom', 'Time', units='s', color=self.limits.x_colour, **{'font-size':'10pt'})
+		self.p1.getAxis('bottom').setPen(pg.mkPen(color=self.limits.x_colour, width=self.limits.x_pen_weight))
 	
 	# Y1 axis   
-		self.p1.setLabel('left', 'Voltage', units='V', color='r', **{'font-size':'10pt'})
-		self.p1.getAxis('left').setPen(pg.mkPen(color='r', width=1))
+		self.p1.setLabel('left', 'Voltage', units='V', color=self.limits.y1_colour, **{'font-size':'10pt'})
+		self.pen_Y1 = pg.mkPen(color=self.limits.y1_colour, width=self.limits.y1_pen_weight)
+		self.p1.getAxis('left').setPen(self.pen_Y1)
 	
 	# setup viewbox for right hand axis
 		self.p2 = pg.ViewBox()
@@ -150,11 +171,12 @@ class dps_GUI(QMainWindow):
 		self.p2.setXLink(self.p1)
 
 	# Y2 axis
-		self.p1.setLabel('right', 'Current', units="A", color='c', **{'font-size':'10pt'})
-		self.p1.getAxis('right').setPen(pg.mkPen(color='c', width=1))
+		self.p1.setLabel('right', 'Current', units="A", color=self.limits.y2_colour, **{'font-size':'10pt'})
+		self.pen_Y2 = pg.mkPen(color=self.limits.y2_colour, width=self.limits.y1_pen_weight)
+		self.p1.getAxis('right').setPen(self.pen_Y2)
 		
 	# scales ViewBox to scene
-		self.p1.vb.sigResized.connect(self.updateViews) 
+		self.p1.vb.sigResized.connect(self.updateViews) 	
 		
 	def updateViews(self):
 		self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
@@ -166,20 +188,17 @@ class dps_GUI(QMainWindow):
 		X = np.asarray(self.graph_X, dtype=np.float32)
 		Y1 = np.asarray(self.graph_Y1, dtype=np.float32)
 		Y2 = np.asarray(self.graph_Y2, dtype=np.float32)
-	
-		pen1=pg.mkPen(color='r',width=1.0)
-		pen2=pg.mkPen(color='c',width=1.0)
 
 		self.p1.clear()
 		self.p2.clear()
 		
-		self.p1.plot(X,Y1,pen=pen1, name="V")
-		self.p2.addItem(pg.PlotCurveItem(X,Y2,pen=pen2, name="I"))
+		self.p1.plot(X,Y1,pen=self.pen_Y1, name="V")
+		self.p2.addItem(pg.PlotCurveItem(X,Y2,pen=self.pen_Y2, name="I"))
 
 		app.processEvents()
 		
 		a = (time.time() - start) * 1000.0
-		self.label_plot_rate.setText(("Plot Rate  : %6.3fms" % (a)))
+		self.label_plot_rate.setText(("Plot Rate  : %8.3fms" % (a)))
 		
 #--- file handling
 	def file_open(self):
@@ -214,7 +233,7 @@ class dps_GUI(QMainWindow):
 	def pushButton_save_plot_clicked(self):
 		self.file_save()
 
-	def pushButton_clear_clicked(self): 
+	def pushButton_clear_plot_clicked(self): 
 		self.graph_X = []
 		self.graph_Y1 = []
 		self.graph_Y2 = []
@@ -252,12 +271,12 @@ class dps_GUI(QMainWindow):
 	def pushButton_set_clicked(self):                   
 		if self.lineEdit_vset.text() != '' or self.lineEdit_iset.text() != '':
 			try:
-				value1 = float(self.lineEdit_vset.text())
+				value1 = abs(float(self.lineEdit_vset.text()))	# added abs() to prevent applying incorrect sign
 			except ValueError:
 				self.lineEdit_vset.setText("Number ?")
 				return
 			try:
-				value2 = float(self.lineEdit_iset.text())
+				value2 = abs(float(self.lineEdit_iset.text()))
 			except ValueError:
 				self.lineEdit_iset.setText("Number ?")
 				return
@@ -316,7 +335,6 @@ class dps_GUI(QMainWindow):
 	def pushButton_connect_clicked(self):
 		if self.pushButton_connect.isChecked():
 			self.serial_connect()
-			self.initial_state = True
 		else:
 			self.serial_disconnect("Disconnected")
 	
@@ -396,6 +414,8 @@ class dps_GUI(QMainWindow):
 #--- loop is actioned from timer1, reading data & controlling charging  
 	def loop_function(self):
 		try:
+			if self.serialconnected == False:
+				self.serial_connect()
 			self.read_all()
 			self.operating_mode()
 		except:
@@ -425,7 +445,21 @@ class dps_GUI(QMainWindow):
 			self.label_operating_mode.setText('CSV')
 		else:
 			self.label_operating_mode.setText('Invalid')
-
+			
+	def accrued_capacity(self, current):
+		if self.capacity_time_old != '':
+			self.capacity_time_current = time.time()
+			self.capacity_time_interval = self.capacity_time_current - self.capacity_time_old
+			self.capacity_time_old = self.capacity_time_current
+			try:
+				self.capacity = self.capacity + ((self.capacity_time_interval / 3600.0) * float(current))
+			except ZeroDivisionError:
+				self.capacity =  0.0
+		#	print self.capacity
+			self.label_capacity.setText("Capacity   : %8.3fAh" % self.capacity)
+		else:
+			self.capacity_time_old = time.time()
+			
 #--- read & display values from DPS 
 	def read_all(self):
 		data = self.pass_2_dps('read_all')
@@ -433,7 +467,9 @@ class dps_GUI(QMainWindow):
 			self.vout = ("%5.2f" % data[2]) # vout
 			self.iout = ("%5.3f" % data[3]) # iout
 			
-			self.time_interval = time.time() - self.time_old					
+			self.accrued_capacity(self.iout)
+			
+			self.time_interval = time.time() - self.time_old			
 			self.graph_X.append(self.time_interval)		# Xaxis  - time interval
 			self.graph_Y1.append(self.vout)				# Y1axis - voltage
 			self.graph_Y2.append(self.iout)				# Y2axis - current
@@ -501,19 +537,14 @@ class dps_GUI(QMainWindow):
 			self.mutex.lock()
 			a = eval("dps.%s('%s', %s)" % (function, cmd, value))
 			self.mutex.unlock()
-			self.label_data_rate.setText("Data Rate : %6.3fms" % ((time.time() - start) * 1000.0)) # display rate of serial comms
+			self.label_data_rate.setText("Data Rate : %8.3fms" % ((time.time() - start) * 1000.0)) # display rate of serial comms
 		return(a)
 		
 #--- serial selection setup       
-	def combobox_ports_read(self):
-		return self.comboBox_ports.currentText()
-	
 	def combobox_datarate_read(self):
 		return self.comboBox_datarate.currentText()
 					
-	def combobox_populate(self):        # collects info on startup
-		self.comboBox_ports.clear()
-		self.comboBox_ports.addItems(self.scan_serial_ports())		
+	def combobox_populate(self):        # collects info on startup		
 		self.comboBox_datarate.clear()
 		self.comboBox_datarate.addItems(["9600", "2400", "4800", "19200"])  # note: 2400 & 19200 doesn't seem to work
 
@@ -540,26 +571,31 @@ class dps_GUI(QMainWindow):
 				pass
 		return result
 		
-	def serial_connect(self):
+	def serial_connect(self): # port autoconnects, baud rate & slave address manual inputs
 		self.serialconnected = False
 		try:
-			port = str(self.combobox_ports_read())
-			baudrate = int(self.combobox_datarate_read())
-			slave_addr = int(self.lineEdit_slave_addr.text())
-			limits = Import_limits("dps5005_limits.ini")
-			ser = Serial_modbus(port, slave_addr, baudrate, 8)
-			global dps
-			dps = Dps5005(ser, limits) #'/dev/ttyUSB0', 1, 9600, 8)
-			if dps.version() != '':
-				self.serialconnected = True
-				self.pushButton_connect.setText("Connected")
-				self.timer.start()
-				if self.time_old == "":
-					self.time_old = time.time()
+			for port in self.scan_serial_ports():
+				try:
+					baudrate = abs(int(self.combobox_datarate_read()))
+					slave_addr = abs(int(self.lineEdit_slave_addr.text()))
+			#		self.limits = Import_limits("dps5005_limits.ini")
+					ser = Serial_modbus(port, slave_addr, baudrate, 8)
+					global dps
+					dps = Dps5005(ser, self.limits) #example '/dev/ttyUSB0', 1, 9600, 8)
+					if dps.version() != '':
+						self.serialconnected = True
+						self.pushButton_connect.setText("Connected")
+						self.timer.start()
+						if self.time_old == "":
+							self.time_old = time.time()
+						print([port], baudrate, slave_addr)
+						break
+				except (OSError, serial.SerialException):
+					pass
 		except Exception as detail:
 			print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error - ", detail)
 			self.serial_disconnect("Try again !!!")
-		
+			
 	def serial_disconnect(self, status):
 		self.shutdown()
 		self.serialconnected = False
