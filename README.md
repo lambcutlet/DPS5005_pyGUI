@@ -86,8 +86,12 @@ pip install pyqt5
 pip install pyqtgraph
 ```
 ```
-if using python2.7 
-pip install configparser
+if using python2.7: 
+  pip install configparser
+```
+OR
+```
+pip install -r requirements.txt
 ```
 
 ## Developed with:
