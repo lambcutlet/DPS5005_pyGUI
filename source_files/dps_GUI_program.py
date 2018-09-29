@@ -243,12 +243,39 @@ class dps_GUI(QMainWindow):
 		filename, _ = QFileDialog.getSaveFileName(self, "Save File", datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")+".csv", "All Files (*);; CSV Files (*.csv)")
 		if filename != '':
 			rows = zip(self.graph_X, self.graph_Y1, self.graph_Y2)
-			with open(filename, 'w') as f:
-				writer = csv.writer(f)
-				row = ['time(s)','voltage(V)','current(A)']
-				writer.writerow(row)
-				for row in rows:
+			
+			if sys.platform.startswith('win'):
+				with open(filename, 'w', newline='') as f:					# added newline to prevent additional carriage return in windows (\r\r\n)
+					writer = csv.writer(f)
+					row = ['time(s)','voltage(V)','current(A)']
 					writer.writerow(row)
+					for row in rows:
+						writer.writerow(row)
+			elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+				with open(filename, 'w') as f:					# added newline to prevent additional carriage return in windows (\r\r\n)
+					writer = csv.writer(f)
+					row = ['time(s)','voltage(V)','current(A)']
+					writer.writerow(row)
+					for row in rows:
+						writer.writerow(row)
+			elif sys.platform.startswith('darwin'):
+				with open(filename, 'w') as f:					# added newline to prevent additional carriage return in windows (\r\r\n)
+					writer = csv.writer(f)
+					row = ['time(s)','voltage(V)','current(A)']
+					writer.writerow(row)
+					for row in rows:
+						writer.writerow(row)
+			else:
+				raise EnvironmentError('Unsupported platform')
+			
+			
+			
+		#	with open(filename, 'w', newline='') as f:					# added newline to prevent additional carriage return in windows (\r\r\n)
+		#		writer = csv.writer(f)
+		#		row = ['time(s)','voltage(V)','current(A)']
+		#		writer.writerow(row)
+		#		for row in rows:
+		#			writer.writerow(row)
 		
 #--- thread related code
 	def progress_fn(self, n):
@@ -394,11 +421,15 @@ class dps_GUI(QMainWindow):
 		
 #--- import CSV file        
 	def open_CSV(self, filename):
+		self.CSV_list = []
 		with open(filename, 'r') as f:
 			csvReader = csv.reader(f)#, delimiter=',')  # reads file
 			next(csvReader, None)                       # skips header
 			data_list = list(csvReader)
-			self.CSV_list = data_list
+			for row in data_list:
+				if len(row) > 2:
+					self.CSV_list.append(row)
+			#self.CSV_list = data_list
 		self.labelCSV(len(self.CSV_list))   
 				
 	def labelCSV(self, value):          # display remaining steps
