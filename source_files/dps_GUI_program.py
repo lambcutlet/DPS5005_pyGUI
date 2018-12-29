@@ -650,12 +650,37 @@ class dps_GUI(QMainWindow):
 	def serial_connect(self): # port autoconnects, baud rate & slave address manual inputs
 		self.serialconnected = False
 		try:
-			for port in self.scan_serial_ports():
+			global dps
+			if not self.limits.port:
+				# Automatic port scan
+				print("Looking for ports...")
+				for port in self.scan_serial_ports():
+					print("Trying port: " + port)
+					try:
+						baudrate = abs(int(self.combobox_datarate_read()))
+						slave_addr = abs(int(self.lineEdit_slave_addr.text()))
+						ser = Serial_modbus(port, slave_addr, baudrate, 8)
+						dps = Dps5005(ser, self.limits) #example '/dev/ttyUSB0', 1, 9600, 8)
+						if dps.version() != '':
+							self.serialconnected = True
+							self.pushButton_connect.setText("Connected")
+							self.timer.start()
+							if self.time_old == "":
+								self.time_old = time.time()
+							print([port], baudrate, slave_addr)
+							self.pushButton_CSV_view.setEnabled(False)		# disable CSV viewing capability
+							self.pushButton_clear_plot_clicked()			# clear plot
+							break
+					except (OSError, serial.SerialException) as detail1:
+						print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error1 - ", detail1)
+						pass
+			else:
+				# Manual port definition in .ini file
+				print("Manual port is set!")
 				try:
 					baudrate = abs(int(self.combobox_datarate_read()))
 					slave_addr = abs(int(self.lineEdit_slave_addr.text()))
-					ser = Serial_modbus(port, slave_addr, baudrate, 8)
-					global dps
+					ser = Serial_modbus(self.limits.port, slave_addr, baudrate, 8)
 					dps = Dps5005(ser, self.limits) #example '/dev/ttyUSB0', 1, 9600, 8)
 					if dps.version() != '':
 						self.serialconnected = True
@@ -663,13 +688,13 @@ class dps_GUI(QMainWindow):
 						self.timer.start()
 						if self.time_old == "":
 							self.time_old = time.time()
-						print([port], baudrate, slave_addr)
+						print([self.limits.port], baudrate, slave_addr)
 						self.pushButton_CSV_view.setEnabled(False)		# disable CSV viewing capability
 						self.pushButton_clear_plot_clicked()			# clear plot
-						break
 				except (OSError, serial.SerialException) as detail1:
 					print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error1 - ", detail1)
 					pass
+				
 		except Exception as detail:
 			print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error - ", detail)
 			self.serial_disconnect("Try again !!!")
