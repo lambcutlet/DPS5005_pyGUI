@@ -80,9 +80,9 @@ The background, axis & pen colours and line (pen) width may be manipulated withi
 
 ## Requirements:
 ```
-pip install serial
-pip install minimalmodbus
-pip install pyqt5
+pip install pyserial
+pip install MinimalModbus
+pip install PyQt5
 pip install pyqtgraph
 ```
 ```
