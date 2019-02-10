@@ -1,4 +1,4 @@
-serial>=0.0.64
+pyserial>=3.4
 MinimalModbus>=0.7
 PyQt5>=5.10.1
 pyqtgraph>=0.10.0

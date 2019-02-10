@@ -29,6 +29,7 @@ What can it do:
 * select slave address (must match hardware configuration)
 * Connect - automatically searches and connects to port (button status shows 'Connected' or 'Disconnected')
 (only tested in linux but should work with windows)
+* New feature - serial port can be fixed by modifying 'port_set' parameter within 'dps5005_limits.ini'
 
 <img src="images/CSVview.png">
 
@@ -79,10 +80,11 @@ The background, axis & pen colours and line (pen) width may be manipulated withi
 * pen weight
 
 ## Requirements:
+* Python2
 ```
-pip install serial
-pip install minimalmodbus
-pip install pyqt5
+pip install pyserial
+pip install MinimalModbus
+pip install PyQt5
 pip install pyqtgraph
 ```
 ```
@@ -93,7 +95,17 @@ OR
 ```
 pip install -r requirements.txt
 ```
-
+* Python3
+```
+pip3 install pyserial
+pip3 install MinimalModbus
+pip3 install PyQt5
+pip3 install pyqtgraph
+```
+OR
+```
+pip3 install -r requirements.txt
+```
 ## Developed with:
 * dps_GUI.ui         - QT designer v5.9.2
 * dps_GUI_program.py - Python 2.7.14
@@ -109,4 +121,8 @@ cd DPS5005_pyGUI/source_files/
 ```
 ```
 python dps_GUI_program.py
+```
+OR
+```
+python3 dps_GUI_program.py
 ```
