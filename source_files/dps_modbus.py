@@ -1,4 +1,5 @@
 import minimalmodbus
+#minimalmodbus.CLOSE_PORT_AFTER_EACH_CALL=True
 import time
 import csv
 
@@ -43,8 +44,9 @@ class Serial_modbus:
 		#self.instrument.serial.port          # this is the serial port name
 		self.instrument.serial.baudrate = baud_rate   # Baud rate 9600 as listed in doc
 		self.instrument.serial.bytesize = byte_size
-		self.instrument.serial.timeout = 0.5     # This had to be increased from the default setting else it did not work !
+		self.instrument.serial.timeout = 1     # This had to be increased from the default setting else it did not work !
 		self.instrument.mode = minimalmodbus.MODE_RTU  #RTU mode
+		self.instrument.debug = False
 
 	def read(self, reg_addr, decimal_places):
 		return self.instrument.read_register(reg_addr, decimal_places)
@@ -70,25 +72,25 @@ class Dps5005:
 	def current_set(self, RWaction='r', value=0.0):	# R/W
 		return self.function(0x01, self.limits.decimals_iset, RWaction, value, self.limits.current_set_max, self.limits.current_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
 
-	def voltage(self):	# R
+	def voltage(self, RWaction='r', value=0):	# R
 		return self.function(0x02, self.limits.decimals_v) 
 
-	def current(self):	# R
+	def current(self, RWaction='r', value=0):	# R
 		return self.function(0x03, self.limits.decimals_i)
 
-	def power(self):	# R
+	def power(self, RWaction='r', value=0):	# R
 		return self.function(0x04, self.limits.decimals_power)
 
-	def voltage_in(self):	# R
+	def voltage_in(self, RWaction='r', value=0):	# R
 		return self.function(0x05, self.limits.decimals_vin)
 
 	def lock(self, RWaction='r', value=0):	# R/W
 		return self.function(0x06, 0, RWaction, value, self.limits.lock_set_max, self.limits.lock_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 
-	def protect(self):	# R
+	def protect(self, RWaction='r', value=0):	# R
 		return self.function(0x07, 0)
 
-	def cv_cc(self):	# R
+	def cv_cc(self, RWaction='r', value=0):	# R
 		return self.function(0x08, 0)
 
 	def onoff(self, RWaction='r', value=0):	# R/W
@@ -97,10 +99,10 @@ class Dps5005:
 	def b_led(self, RWaction='r', value=0):	# R/W
 		return self.function(0x0A, 0, RWaction, value, self.limits.b_led_set_max, self.limits.b_led_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 
-	def model(self):	# R
+	def model(self, RWaction='r', value=0):	# R
 		return self.function(0x0B, 0)
 
-	def version(self):	# R
+	def version(self, RWaction='r', value=0):	# R
 		return self.function(0x0C, self.limits.decimals_version)
 
 	def extract_m(self, RWaction='r', value=0.0):	# R/W
@@ -134,14 +136,15 @@ class Dps5005:
 
 	def read_all(self, RWaction='r', value=0.0):	# Read data as a block, much faster than individual reads
 		data = self.functions(0x00, 16, RWaction, value) # reg_addr, number of bytes, RWaction, value
-		#--- adjust values to floating points
-		data[0] = data[0] / float(10**self.limits.decimals_vset)	#100.0	# voltage_set
-		data[1] = data[1] / float(10**self.limits.decimals_iset)	#1000.0	# current_set
-		data[2] = data[2] / float(10**self.limits.decimals_v)	#100.0	# voltage
-		data[3] = data[3] / float(10**self.limits.decimals_i)	#1000.0	# current
-		data[4] = data[4] / float(10**self.limits.decimals_power)	#100.0	# power
-		data[5] = data[5] / float(10**self.limits.decimals_vin)	#100.0	# voltage_in
-		data[12] = data[12] / float(10**self.limits.decimals_version)	#10.0	# version
+		if data != False:
+			#--- adjust values to floating points
+			data[0] = data[0] / float(10**self.limits.decimals_vset)	#100.0	# voltage_set
+			data[1] = data[1] / float(10**self.limits.decimals_iset)	#1000.0	# current_set
+			data[2] = data[2] / float(10**self.limits.decimals_v)	#100.0	# voltage
+			data[3] = data[3] / float(10**self.limits.decimals_i)	#1000.0	# current
+			data[4] = data[4] / float(10**self.limits.decimals_power)	#100.0	# power
+			data[5] = data[5] / float(10**self.limits.decimals_vin)	#100.0	# voltage_in
+			data[12] = data[12] / float(10**self.limits.decimals_version)	#10.0	# version
 		return data
 	
 	def write_voltage_current(self, RWaction='r', value=0):	# write voltage & current as a block
@@ -168,26 +171,29 @@ class Dps5005:
 			try:
 				a = self.serial_data.read(reg_addr, decimal_places)
 			except IOError:
-				print("Failed to read from instrument")
+				print("Failed to read from instrument %s" % str(hex(reg_addr)))
 		else:
 			try:
 				self.serial_data.write(reg_addr, value, decimal_places) # register, value, No_of_decimal_places
 			except IOError:
-				print("Failed to write to instrument")
+				print("Failed to write to instrument %s" % str(hex(reg_addr)))
+		#print("function: " + str(a))
 		return(a)
 	
 	def functions(self, reg_addr=0, num_of_addr=0, RWaction='r', value=0):
 		a = False
+		#print("functions: %s %s %s %s" % (str(reg_addr), str(num_of_addr), str(RWaction), str(value)))
 		if RWaction != 'w':
 			try:
 				a = self.serial_data.read_block(reg_addr, num_of_addr)
 			except IOError:
-				print("Failed to read block from instrument")
+				print("Failed to read block from instrument %s" % str(hex(reg_addr)))
 		else:
 			try:
 				self.serial_data.write_block(reg_addr, value)
 			except IOError:
-				print("Failed to write block to instrument")
+				print("Failed to write block to instrument %s" % str(hex(reg_addr)))
+		#print("functions: " + str(a))
 		return(a)
 	
 	def delay(self, value):
@@ -237,7 +243,7 @@ class Dps5005:
 This file can operate independently controlling the DPS via the commandline however the GUI is much simpler.
 '''
 if __name__ == '__main__':
-	ser = Serial_modbus('/dev/ttyUSB1', 1, 9600, 8)
+	ser = Serial_modbus('/dev/rfcomm0', 1, 9600, 8)	#ttyUSB1
 	limits = Import_limits("dps5005_limits.ini")
 	dps = Dps5005(ser, limits)
 	try:

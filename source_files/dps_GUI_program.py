@@ -21,7 +21,7 @@ import pyqtgraph as pg
 import numpy as np
 
 dps = 0
-dps_mode = 0 # 0 PSU default, 1 nicad, 2 li-ion, 3 CSV, 
+dps_mode = 0 # 0 PSU default, 1 NiCad, 2 li-Ion, 3 CSV, 
 
 
 class WorkerSignals(QObject):
@@ -267,15 +267,6 @@ class dps_GUI(QMainWindow):
 						writer.writerow(row)
 			else:
 				raise EnvironmentError('Unsupported platform')
-			
-			
-			
-		#	with open(filename, 'w', newline='') as f:					# added newline to prevent additional carriage return in windows (\r\r\n)
-		#		writer = csv.writer(f)
-		#		row = ['time(s)','voltage(V)','current(A)']
-		#		writer.writerow(row)
-		#		for row in rows:
-		#			writer.writerow(row)
 		
 #--- thread related code
 	def progress_fn(self, n):
@@ -395,10 +386,12 @@ class dps_GUI(QMainWindow):
 			self.pass_2_dps('write_voltage_current', 'w', [value1, value2])		
 			
 	def pushButton_connect_clicked(self):
+		status = False
 		if self.pushButton_connect.isChecked():
-			self.serial_connect()
-		else:
-			self.serial_disconnect("Disconnected")
+			status = self.serial_connect()
+		if status == False:
+			status = self.serial_disconnect("Disconnected")
+		print("pushButton_connect_clicked - status: " + str(status))
 	
 	def pushButton_CSV_clicked(self):
 		if len(self.CSV_list) > 0:
@@ -413,8 +406,8 @@ class dps_GUI(QMainWindow):
 		if len(self.CSV_list) > 0:
 			if self.serialconnected == False:	
 				self.graph_X = [row[0] for row in self.CSV_list]		# Xaxis  - time interval
-				self.graph_Y1 = [row[1] for row in self.CSV_list]				# Y1axis - voltage
-				self.graph_Y2 = [row[2] for row in self.CSV_list]				# Y2axis - current
+				self.graph_Y1 = [row[1] for row in self.CSV_list]		# Y1axis - voltage
+				self.graph_Y2 = [row[2] for row in self.CSV_list]		# Y2axis - current
 				self.update_graph_plot()
 			else:
 				pass
@@ -490,12 +483,20 @@ class dps_GUI(QMainWindow):
 #--- loop is actioned from timer1, reading data & controlling charging  
 	def loop_function(self):
 		try:
-			if self.serialconnected == False:
-				self.serial_connect()
 			self.read_all()
 			self.operating_mode()
 		except:
-			self.serial_disconnect("Disconnected")
+			#self.serial_disconnect("Disconnected - loop")
+			print("Disconnected - loop")
+		#	self.shutdown()
+		#	self.serialconnected = False
+		#	self.mutex.unlock()
+		#	self.timer.stop()
+		#	self.pushButton_connect.setText(status)
+		#	self.pushButton_connect.setChecked(False)
+		#	self.combobox_populate()
+		#	self.pushButton_CSV_view.setEnabled(True)						# enable CSV viewing capability
+
 		
 #--- operating mode 
 	def operating_mode(self):
@@ -539,7 +540,11 @@ class dps_GUI(QMainWindow):
 #--- read & display values from DPS 
 	def read_all(self):
 		data = self.pass_2_dps('read_all')
-		if data != False:       
+		print("read_all - status: %s" % data) 
+
+		if data == False: 
+			pass
+		else:     
 			self.vout = ("%5.2f" % data[2]) # vout
 			self.iout = ("%5.3f" % data[3]) # iout
 			
@@ -610,9 +615,13 @@ class dps_GUI(QMainWindow):
 		a = False
 		if self.serialconnected != False:
 			start = time.time()
-			self.mutex.lock()
-			a = eval("dps.%s('%s', %s)" % (function, cmd, value))
-			self.mutex.unlock()
+			print("pass_2_dps %s %s" % (function, cmd))
+			try:	
+				self.mutex.lock()
+				a = eval("dps.%s('%s', %s)" % (function, cmd, value))
+				self.mutex.unlock()		
+			except:
+				self.mutex.unlock()
 			self.label_data_rate.setText("Data Rate : %8.3fms" % ((time.time() - start) * 1000.0)) # display rate of serial comms
 		return(a)
 		
@@ -626,78 +635,68 @@ class dps_GUI(QMainWindow):
 
 #--- serial port stuff  
 	def scan_serial_ports(self):
-		if sys.platform.startswith('win'):
-			ports = ['COM%s' % (i + 1) for i in range(256)]
-		elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
-			# this excludes your current terminal "/dev/tty"
-			ports = glob.glob('/dev/tty[A-Za-z]*')
-		elif sys.platform.startswith('darwin'):
-			ports = glob.glob('/dev/tty.*')
-		else:
-			raise EnvironmentError('Unsupported platform')
-
 		result = []
-		for port in ports:
-			try:
-				s = serial.Serial(port)
-				s.flush()
-				s.close()
-				result.append(port)
-			except (OSError, serial.SerialException):
-				pass
-		return result
+		if self.limits.port_set: 			# modified by christophjurczyk for automatic port scanning or set serial port
+			# Manual port definition in .ini file
+			result.append(self.limits.port_set)
+			print("Manual port is set: " + result[0])					
+		else:	
+			# Automatic port scan
+			print("Looking for ports...")
+			if sys.platform.startswith('win'):
+				ports = ['COM%s' % (i + 1) for i in range(256)]
+			elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+				# this excludes your current terminal "/dev/tty"
+				ports = glob.glob('/dev/tty[A-Za-z]*') + glob.glob('/dev/rfcomm*')
+			elif sys.platform.startswith('darwin'):
+				ports = glob.glob('/dev/tty.*')
+			else:
+				raise EnvironmentError('Unsupported platform')
+			for port in ports:
+				try:
+					s = serial.Serial(port)
+					s.close()
+					result.append(port)
+				except (OSError, serial.SerialException):
+					pass
+		return(result)
 		
-	def serial_connect(self): # port autoconnects, baud rate & slave address manual inputs
+	def serial_connect(self): # autoconnect - port, manually configure baud rate & slave address
 		self.serialconnected = False
 		try:
 			global dps
-			if not self.limits.port_set: 			# modified by christophjurczyk for automatic port scanning or set serial port
-				# Automatic port scan
-				print("Looking for ports...")
-				for port in self.scan_serial_ports():
-					print("Trying port: " + port)
-					try:
-						baudrate = abs(int(self.combobox_datarate_read()))
-						slave_addr = abs(int(self.lineEdit_slave_addr.text()))
-						ser = Serial_modbus(port, slave_addr, baudrate, 8)
-						dps = Dps5005(ser, self.limits) #example '/dev/ttyUSB0', 1, 9600, 8)
-						if dps.version() != '':
-							self.serialconnected = True
-							self.pushButton_connect.setText("Connected")
-							self.timer.start()
-							if self.time_old == "":
-								self.time_old = time.time()
-							print([port], baudrate, slave_addr)
-							self.pushButton_CSV_view.setEnabled(False)		# disable CSV viewing capability
-							self.pushButton_clear_plot_clicked()			# clear plot
-							break
-					except (OSError, serial.SerialException) as detail1:
-						print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error1 - ", detail1)
-						pass
-			else:
-				# Manual port definition in .ini file
-				print("Manual port is set!")
-				try:
-					baudrate = abs(int(self.combobox_datarate_read()))
-					slave_addr = abs(int(self.lineEdit_slave_addr.text()))
-					ser = Serial_modbus(self.limits.port_set, slave_addr, baudrate, 8)
-					dps = Dps5005(ser, self.limits) #example '/dev/ttyUSB0', 1, 9600, 8)
-					if dps.version() != '':
-						self.serialconnected = True
+			ports = self.scan_serial_ports()						
+			#ports = ['/dev/rfcomm0']
+
+			print("Ports: %s" % ports)
+			for port in ports:
+				print("Trying port: " + port)
+				baudrate = abs(int(self.combobox_datarate_read()))
+				slave_addr = abs(int(self.lineEdit_slave_addr.text()))
+				ser = Serial_modbus(port, slave_addr, baudrate, 8)
+				dps = Dps5005(ser, self.limits)
+				
+				self.serialconnected = True
+				value = 0
+				self.pass_2_dps('b_led', 'w', str(value))
+				data = self.pass_2_dps('voltage_in')
+				if data != False:
+					self.lcdNumber_vin.display("%5.2f" % data)       # vin
+					if float(data) > 3.0:
 						self.pushButton_connect.setText("Connected")
 						self.timer.start()
 						if self.time_old == "":
 							self.time_old = time.time()
-						print([self.limits.port_set], baudrate, slave_addr)
+						print("Connected")# - %s, %s, %s" % str(port), str(baudrate), str(slave_addr))
 						self.pushButton_CSV_view.setEnabled(False)		# disable CSV viewing capability
 						self.pushButton_clear_plot_clicked()			# clear plot
-				except (OSError, serial.SerialException) as detail1:
-					print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error1 - ", detail1)
-					pass
-
+				else:
+					self.serialconnected = False
 		except Exception as detail:
-			print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error - ", detail)
+			print(datetime.datetime.now().strftime("%y-%m-%d %H:%M:%S"), "Error(serial_connect) - ", detail)
 			self.serial_disconnect("Try again !!!")
+		print("serial_connect - status: " + str(self.serialconnected))
+		return(self.serialconnected)
 		
 	def serial_disconnect(self, status):
 		self.shutdown()
@@ -708,7 +707,8 @@ class dps_GUI(QMainWindow):
 		self.pushButton_connect.setChecked(False)
 		self.combobox_populate()
 		self.pushButton_CSV_view.setEnabled(True)						# enable CSV viewing capability
-		print(status)
+		print("serial_disconnect - status: " + str(status))
+		return(status)
 			
 app = QApplication(sys.argv)
 widget = dps_GUI()
