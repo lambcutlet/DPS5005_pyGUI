@@ -174,7 +174,7 @@ class dps_GUI(QMainWindow):
 
 	# Y2 axis
 		self.p1.setLabel('right', 'Current', units="A", color=self.limits.y2_colour, **{'font-size':'10pt'})
-		self.pen_Y2 = pg.mkPen(color=self.limits.y2_colour, width=self.limits.y1_pen_weight)
+		self.pen_Y2 = pg.mkPen(color=self.limits.y2_colour, width=self.limits.y2_pen_weight)
 		self.p1.getAxis('right').setPen(self.pen_Y2)
 		
 	# scales ViewBox to scene
