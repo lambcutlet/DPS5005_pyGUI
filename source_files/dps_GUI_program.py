@@ -456,7 +456,7 @@ class dps_GUI(QMainWindow):
 				
 				data_list.pop(0)
 				self.timer2.stop()
-				self.timer2.setInterval(value0*1000)
+				self.timer2.setInterval(int(value0)*1000)
 				self.timer2.start()
 				self.labelCSV(len(self.CSV_list)) 	# display No. of remaining steps
 			else:
