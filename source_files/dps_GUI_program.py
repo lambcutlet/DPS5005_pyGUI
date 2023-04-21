@@ -449,7 +449,7 @@ class dps_GUI(QMainWindow):
 				
 				data_list.pop(0)
 				self.timer2.stop()
-				self.timer2.setInterval(value0*1000)
+				self.timer2.setInterval(int(value0)*1000)
 				self.timer2.start()
 				self.labelCSV(len(self.CSV_list)) 	# display No. of remaining steps
 			else:
@@ -540,7 +540,7 @@ class dps_GUI(QMainWindow):
 #--- read & display values from DPS 
 	def read_all(self):
 		data = self.pass_2_dps('read_all')
-		print("read_all - status: %s" % data) 
+		#print("read_all - status: %s" % data) 
 
 		if data == False: 
 			pass
@@ -615,7 +615,7 @@ class dps_GUI(QMainWindow):
 		a = False
 		if self.serialconnected != False:
 			start = time.time()
-			print("pass_2_dps %s %s" % (function, cmd))
+			#print("pass_2_dps %s %s" % (function, cmd))
 			try:	
 				self.mutex.lock()
 				a = eval("dps.%s('%s', %s)" % (function, cmd, value))
@@ -690,6 +690,9 @@ class dps_GUI(QMainWindow):
 						print("Connected")# - %s, %s, %s" % str(port), str(baudrate), str(slave_addr))
 						self.pushButton_CSV_view.setEnabled(False)		# disable CSV viewing capability
 						self.pushButton_clear_plot_clicked()			# clear plot
+						break
+					else:
+						continue
 				else:
 					self.serialconnected = False
 		except Exception as detail:
