@@ -623,7 +623,7 @@ class dps_GUI(QMainWindow):
 						self.horizontalSlider_brightness.setValue(value)    # brightness
 						self.label_brightness.setText('Brightness Level:   %s' % value)
 				
-				self.label_model.setText("Model       :   %s" % data[11])   # model
+				self.label_model.setText("Model       :   %s" % int(data[11]))   # model
 				self.label_version.setText("Version     :   %s" % data[12]) # version
 		else:
 			logger.error(f"Received incomplete data packet: length {len(data) if data else 0}")
