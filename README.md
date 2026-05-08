@@ -80,21 +80,6 @@ The background, axis & pen colours and line (pen) width may be manipulated withi
 * pen weight
 
 ## Requirements:
-* Python2
-```
-pip install pyserial
-pip install MinimalModbus
-pip install PyQt5
-pip install pyqtgraph
-```
-```
-if using python2.7: 
-  pip install configparser
-```
-OR
-```
-pip install -r requirements.txt
-```
 * Python3
 ```
 pip3 install pyserial
@@ -107,9 +92,9 @@ OR
 pip3 install -r requirements.txt
 ```
 ## Developed with:
-* dps_GUI.ui         - QT designer v5.9.2
-* dps_GUI_program.py - Python 2.7.14
-* dps_modbus.py      - Python 2.7.14
+* dps_GUI.ui         - QT designer v5.15.18
+* dps_GUI_program.py - Python 3.14.4
+* dps_modbus.py      - Python 3.4.4
 * dps5005_limits.ini - text file
 
 ## Download & run:
@@ -119,10 +104,6 @@ git clone https://github.com/lambcutlet/DPS5005_pyGUI
 ```
 cd DPS5005_pyGUI/source_files/
 ```
-```
-python dps_GUI_program.py
-```
-OR
 ```
 python3 dps_GUI_program.py
 ```
