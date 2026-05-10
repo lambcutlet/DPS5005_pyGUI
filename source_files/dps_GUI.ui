@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1071</width>
-    <height>497</height>
+    <height>503</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -437,6 +437,9 @@
         </property>
         <property name="text">
          <string>CSV run</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
