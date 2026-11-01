@@ -1,6 +1,9 @@
 import minimalmodbus, serial
 import time
+import datetime
 import csv
+import traceback
+import numpy as np
 
 try:
 	import ConfigParser
@@ -14,6 +17,10 @@ these limits prevent the program from issuing silly values.
 '''
 class Import_limits:
 	def __init__(self, filename):
+		self.reg = {}
+		self.reg_name = {}
+		self.decimals = {}
+		self.encoding = {}
 		self._read_file(filename)
 		self._read_file(self.device_config)
 		
@@ -23,17 +30,39 @@ class Import_limits:
 		if len(found_files) == 0:
 			print(f"Config file '{filename}' not found. Potential fix: start the program directly from the containing folder.")
 			quit()
-		sections = [
-			"SectionOne",
-			"SectionTwo",
-			"SectionThree",
-		]
-		for section in sections:
-			if section in Config.sections():
-				options = Config.options(section)		
-				for i in range(len(options)):
-					key = options[i]
-					exec("self.%s = %s" % (key, Config.get(section, key)))		
+
+		for section in Config.sections():
+			for key in Config.options(section):
+				value = Config.get(section, key)
+				match section:
+					case "Registers":
+						value = self._parse_int_or_list(value)
+						self.reg[key] = value
+						try:
+							self.reg_name[value] = key
+						except:
+							for v in value:
+								self.reg_name[v] = key
+					case "Encoding":
+						self.encoding[key] = self._parse_int_or_list(value)
+					case "Decimals":
+						self.decimals[key] = int(value)
+						exec("self.%s = %s" % ('decimals_'+key, value))
+					case "SectionOne" | "SectionTwo" | "SectionThree":
+						exec("self.%s = %s" % (key, value))
+					case _:
+						pass
+	def _parse_int_or_list(self, value):
+		try:
+			return int(value)
+		except:
+			str_list = [x.strip() for x in value.split(',')]
+			try:
+				int_list = [int(x) for x in str_list]
+				return int_list
+			except:
+				return str_list
+
 
 '''
 # original inspiration for this came from here:
@@ -69,7 +98,141 @@ class Serial_modbus:
 	
 	def write_block(self, reg_addr, value):
 		self.instrument.write_registers(reg_addr, value)
-				
+
+class ModbusInstrumentWrapper:
+	def __init__(self, serial_modbus, device_properties):
+		self.serial_data = serial_modbus
+		self.limits = device_properties
+		self.preset = None
+
+		self._generate_keys_in_readable_groups()
+	
+	def read_addresses(self, addresses):
+		# TODO: avoid too big blocks and forbidden addresses
+		_min = min(addresses)
+		count = max(addresses) - _min +1
+		values = self.serial_data.read_block(_min, count)
+		return [values[addr - _min] for addr in addresses]
+
+	def decode_words(self, words, key):
+		value = None
+		if len(words) > 1:
+			match key:
+				case key if (key in limits.decimals) or ((len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals)):
+					value = 0
+					for i, word in enumerate(words):
+						value += word<<(16*i)
+				case "time":
+					value = datetime.timedelta(hours = words[2], minutes = words[1], seconds = words[0])
+				#case _:
+				#	raise NotImplementedError(f"Unclear how to decode the words {words} for the key '{key}'. Maybe you need to adjust the device config (decimals).")
+		else:
+			value = words[0]
+
+		match key:
+			case "version":
+				value = str(value)
+				for i in range(self.limits.decimals_version):
+					n = i*2+1
+					value = value[:-n] + '.' + value[-n:]	# version
+			case key if key in limits.decimals:
+				value = value/float(10**self.limits.decimals[key])
+			case key if (len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals): # use the decimals places defined for <name> on preset_<name>
+				_key = key[7:]
+				value = value/float(10**self.limits.decimals[_key])
+			case key if key in limits.encoding:
+				value = limits.encoding[key][value]
+			case "model":
+				if int(value) in limits.model_numbers:
+					value = limits.model_name
+		return value
+
+	
+	def encode_value(self, key, value):
+		word = None
+
+		#encode
+		match key:
+			case "version":
+				raise NotImplementedError("encode "+key);
+			case key if key in limits.decimals:
+				value = int(value*10**self.limits.decimals[key])
+			case key if (len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals): # use the decimals places defined for <name> on preset_<name>
+				_key = key[7:]
+				value = int(value*10**self.limits.decimals[_key])
+			case key if key in limits.encoding:
+				raise NotImplementedError("encode " + key)
+			case "model":
+				raise NotImplementedError("encode " + key)
+		
+		#check limits
+		raise NotImplementedError("check limits")
+
+		#TODO: raise error on multi-word variables?
+
+		return word
+
+	def get_addresses(self, key, reevaluate_preset = True):
+		part_of_settable_preset = (len(key) > 7) and (key[:7] == "preset_") and ("preset" in self.limits.reg)
+		if part_of_settable_preset and ((self.preset == None) or reevaluate_preset):
+			preset_addr = self.limits.reg["preset"]
+			self.preset = self.serial_data.read(preset_addr, 0)
+
+		addresses = self.limits.reg[key]
+		if isinstance(addresses, int):
+			addresses = [addresses]
+
+		if part_of_settable_preset:
+			addresses = [address + self.preset*self.limits.preset_offset for address in addresses]
+		return addresses
+
+	def read_value(self, key):
+		addresses = self.get_addresses(key)
+		words = self.read_addresses(addresses)
+
+		value = self.decode_words(words, key)
+
+		return value
+	
+	def read_values(self, keys):
+		addresses = []
+		indices = []
+		n = 0
+		for i, key in enumerate(keys):
+			key_addresses = self.get_addresses(key)
+			addresses.extend(key_addresses)
+
+			m = len(key_addresses)
+			indices.append(n + np.arange(m))
+			n+= m
+		words = self.read_addresses(addresses)
+		grouped_words = [[words[i] for i in ind] for ind in indices]
+		values = [self.decode_words(g_words, keys[i]) for i, g_words in enumerate(grouped_words)]
+		value_dict = {key: values[i] for i, key in enumerate(keys)}
+		return value_dict
+
+	def _generate_keys_in_readable_groups(self, avoid_duplicates = True):
+		sorted_addrs = sorted(self.limits.reg_name.keys())
+
+		self.key_groups = []
+		current_group = []
+		for i, address in enumerate(sorted_addrs):
+			if (i == 0) or (current_group[-1] +1 == address):
+				current_group.append(address)
+			else:
+				current_group_keys = [self.limits.reg_name[x] for x in current_group]
+				self.key_groups.append(current_group_keys)
+				current_group = [address]
+		current_group_keys = [self.limits.reg_name[x] for x in current_group]
+		self.key_groups.append(current_group_keys)
+
+		#remove duplicates
+		self.key_groups = [list(dict.fromkeys(group)) for group in self.key_groups]
+
+		return self.key_groups
+	
+
+
 class Dps5005:
 #--- new ---
 	def __init__(self, ser, limits):
@@ -77,97 +240,131 @@ class Dps5005:
 		self.limits = limits
 		
 	def voltage_set(self, RWaction='r', value=0.0):	# R/W
-		return self.function(0x00, self.limits.decimals_vset, RWaction, value, self.limits.voltage_set_max, self.limits.voltage_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
+		return self.function(limits.reg['vset'], self.limits.decimals_vset, RWaction, value, self.limits.voltage_set_max, self.limits.voltage_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
 
 	def current_set(self, RWaction='r', value=0.0):	# R/W
-		return self.function(0x01, self.limits.decimals_iset, RWaction, value, self.limits.current_set_max, self.limits.current_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
+		return self.function(limits.reg['iset'], self.limits.decimals_iset, RWaction, value, self.limits.current_set_max, self.limits.current_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
 
 	def voltage(self):	# R
-		return self.function(0x02, self.limits.decimals_v) 
+		return self.function(limits.reg['v'], self.limits.decimals_v) 
 
 	def current(self):	# R
-		return self.function(0x03, self.limits.decimals_i)
+		return self.function(limits.reg['i'], self.limits.decimals_i)
 
 	def power(self):	# R
-		return self.function(0x04, self.limits.decimals_power)
+		return self.function(limits.reg['power'], self.limits.decimals_power)
 
 	def voltage_in(self):	# R
-		return self.function(0x05, self.limits.decimals_vin)
+		return self.function(limits.reg['vin'], self.limits.decimals_vin)
 
 	def lock(self, RWaction='r', value=0):	# R/W
-		return self.function(15, 0, RWaction, value, self.limits.lock_set_max, self.limits.lock_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(limits.reg['lock'], 0, RWaction, value, self.limits.lock_set_max, self.limits.lock_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 
 	def protect(self):	# R
-		return self.function(0x16, 0)
+		return self.function(limits.reg['protect'], 0)
 
 	def cv_cc(self):	# R
-		return self.function(17, 0)
+		return self.function(limits.reg['cv_cc'], 0)
 
 	def onoff(self, RWaction='r', value=0):	# R/W
-		return self.function(18, 0, RWaction, value, self.limits.onoff_set_max, self.limits.onoff_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(limits.reg['on'], 0, RWaction, value, self.limits.onoff_set_max, self.limits.onoff_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 		
 	def b_led(self, RWaction='r', value=0):	# R/W
-		return self.function(0x0A, 0, RWaction, value, self.limits.b_led_set_max, self.limits.b_led_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return self.function(limits.reg['backlight'], 0, RWaction, value, self.limits.b_led_set_max, self.limits.b_led_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 
 	def model(self):	# R
-		return self.function(22, 0)
+		return self.function(limits.reg['model'], 0)
 
 	def version(self):	# R
-		version = str(self.function(23, 0))
+		version = str(self.function(limits.reg['version'], 0))
 		for i in range(self.limits.decimals_version):
 			n = i*2+1
 			version = version[:-n] + '.' + version[-n:]	# version
 		return version
 
-	# def extract_m(self, RWaction='r', value=0.0):	# R/W
-		# return self.function(0x23, 0, RWaction, value, self.limits.extract_m_set_max, self.limits.extract_m_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-				
-# #---		
+	def read_all(self, reg_addr = 0x00, block_size = 30):	# Read data as a block, much faster than individual reads
+		data_raw = self.functions(reg_addr, num_of_addr=block_size, RWaction = 'r') # reg_addr, number of bytes, RWaction, value
 		
-	# def voltage_set2(self, RWaction='r', value=0.0):	# R/W
-		# return self.function(0x50, self.limits.decimals_vset, RWaction, value, self.limits.voltage_set2_max, self.limits.voltage_set2_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		#TODO remove data variable (needs refactoring of dependencies)
+		data = data_raw.copy()
+		try:
+			data[0] = data_raw[0] / float(10**self.limits.decimals_vset)	# voltage_set
+			data[1] = data_raw[1] / float(10**self.limits.decimals_iset)	# current_set
+			data[2] = data_raw[2] / float(10**self.limits.decimals_v)		# voltage
+			data[3] = data_raw[3] / float(10**self.limits.decimals_i)		# current
+			data[4] = data_raw[4] / float(10**self.limits.decimals_power)	# power
+			data[5] = data_raw[5] / float(10**self.limits.decimals_vin)	 	# voltage_in
+			data[13] = data_raw[13] / float(10**self.limits.decimals_temp_internal)	# temperature internal
+			data[8] = data_raw[8] / float(10**self.limits.decimals_energy)	# energy
+
+			data[19] = "°F" if data_raw[19] else "°C"
+
+			data[23] = str(data_raw[23])
+			for i in range(self.limits.decimals_version):
+				n = i*2+1
+				data[23] = data[23][:-n] + '.' + data[23][-n:]	# version
+		except Exception:
+			print(traceback.format_exc())
+
+		data_dict = {}
+		for key in limits.reg:
+			index = limits.reg.get(key)
+			value = None
+			if isinstance(index, list):
+				multi_word = True
+				words = []
+				try:
+					for i in index:
+						addr = i-reg_addr
+						assert addr >= 0
+						words.append(data_raw[addr])
+				except IndexError, AssertionError:
+					continue
+				match key:
+					case key if key in limits.decimals:
+						value = 0
+						for i, word in enumerate(words):
+							value += word<<(16*i)
+						value = value/float(10**self.limits.decimals[key])
+					case "time":
+						value = datetime.timedelta(hours = words[2], minutes = words[1], seconds = words[0])
+
+						
+			elif isinstance(index, int):
+				try:
+					addr = index-reg_addr
+					assert addr >= 0
+					value = data_raw[addr]
+				except IndexError, AssertionError:
+					continue
+				match key:
+					case "version":
+						value = str(value)
+						for i in range(self.limits.decimals_version):
+							n = i*2+1
+							value = value[:-n] + '.' + value[-n:]	# version
+					case key if key in limits.decimals:
+						value = value/float(10**self.limits.decimals[key])
+					case key if (len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals):
+						_key = key[7:]
+						value = value/float(10**self.limits.decimals[_key])
+					case key if key in limits.encoding:
+						value = limits.encoding[key][value]
+					case "temp_unit":
+						"°F" if value else "°C"
+					case "model":
+						if int(value) in limits.model_numbers:
+							value = limits.model_name
+			data_dict[key] = value
+			#print(reg_addr, index, key, data_dict[key])
+
+		for i, value in enumerate(data_raw):
+			key = limits.reg_name.get(i)
 			
-	# def current_set2(self, RWaction='r', value=0.0):	# R/W
-		# return self.function(0x51, self.limits.decimals_iset, RWaction, value, self.limits.current_set2_max, self.limits.current_set2_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-
-	# def s_ovp(self, RWaction='r', value=0):	# R/W
-		# return self.function(0x52, self.limits.decimals_ovp, RWaction, value, self.limits.s_ovp_set_max, self.limits.s_ovp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-		
-	# def s_ocp(self, RWaction='r', value=0):	# R/W
-		# return self.function(0x53, self.limits.decimals_ocp, RWaction, value, self.limits.s_ocp_set_max, self.limits.s_ocp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-
-	# def s_opp(self, RWaction='r', value=0):	# R/W
-		# return self.function(0x54, self.limits.decimals_opp, RWaction, value, self.limits.s_opp_set_max, self.limits.s_opp_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-
-	# def b_led2(self, RWaction='r', value=0):	# R/W
-		# return self.function(0x55, 0, RWaction, value, self.limits.b_led2_set_max, self.limits.b_led2_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-
-	# def m_pre(self, RWaction='r', value=0):	# R/W
-		# return self.function(0x56, 0, RWaction, value, self.limits.m_pre_set_max, self.limits.m_pre_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
+		return data, data_raw, data_dict
 	
-	# def s_ini(self, RWaction='r', value=0):	# R/W
-		# return self.function(0x57, 0, RWaction, value, self.limits.s_ini_set_max, self.limits.s_ini_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
 	
-	def read_all(self, RWaction='r', value=0.0):	# Read data as a block, much faster than individual reads
-		data = self.functions(0x00, 30, RWaction, value) # reg_addr, number of bytes, RWaction, value
-		#--- adjust values to floating points
-		data[0] = data[0] / float(10**self.limits.decimals_vset)	# voltage_set
-		data[1] = data[1] / float(10**self.limits.decimals_iset)	# current_set
-		data[2] = data[2] / float(10**self.limits.decimals_v)		# voltage
-		data[3] = data[3] / float(10**self.limits.decimals_i)		# current
-		data[4] = data[4] / float(10**self.limits.decimals_power)	# power
-		data[5] = data[5] / float(10**self.limits.decimals_vin)	 	# voltage_in
-		data[13] = data[13] / float(10**self.limits.decimals_temp_internal)	# temperature internal
-		data[8] = data[8] / float(10**self.limits.decimals_energy)	# energy
 
-		data[19] = "°F" if data[19] else "°C"
-
-		data[23] = str(data[23])
-		for i in range(self.limits.decimals_version):
-			n = i*2+1
-			data[23] = data[23][:-n] + '.' + data[23][-n:]	# version
-		return data
-	
 	def write_voltage_current(self, RWaction='r', value=0):	# write voltage & current as a block
 		reg_addr = 0x00 
 		# added safety limits - any excursion results in zero
@@ -184,6 +381,9 @@ class Dps5005:
 		self.functions(reg_addr, 0, 'w', value)
 		
 #---
+	
+
+
 	def function(self, reg_addr=0, decimal_places=0, RWaction='r', value=0.0, max_value=0, min_value=0):
 		a = False
 		if value > max_value or value < min_value: 
@@ -283,91 +483,111 @@ if __name__ == '__main__':
 		print(f"Could not open the serial port '{limits.port_set}'.")
 		print(e.args)
 		quit()
-	dps = Dps5005(ser, limits)
-	try:
-		while True:
-			route = input("Enter command: ")
-			if route == "q":
-				quit()
-			elif route == "read":
-				start = time.time()
-				print(dps.read_all())
-				print(time.time() - start)	
-			elif route == "write":
-				value = [23.47, 1.23]
-				dps.write_voltage_current('w', value)
-			elif route == "r":
-				print("The amount of decimal places shown here may not be correct")
-				#start = time.time()
-				print("voltage_set :  %6.2f" % dps.voltage_set())
-				#print(time.time() - start)
-				print("current_set :  %6.3f" % dps.current_set())	
-				print("voltage     :  %6.2f" % dps.voltage())
-				print("current     :  %6.3f" % dps.current())
-				print("power       :  %6.2f" % dps.power())
-				print("voltage_in  :  %6.2f" % dps.voltage_in())
-		
-				print("lock        :  %6s" % dps.lock())
-				print("protection  :  %6s" % dps.protect())	
-				print("cv_cc       :  %6s" % dps.cv_cc())
-				print("onoff       :  %6s" % dps.onoff())
-				#print("b_led       :  %6s" % dps.b_led())
-				print("model       :  %6x" % dps.model())
-				print("version     :  %6s" % dps.version())
-				# print("extract_m   :  %6s" % dps.extract_m())
-				
-				# print("voltage_set2:  %6s" % dps.voltage_set2())	
-				# print("current_set2:  %6s" % dps.current_set2())
-				# print("s_ovp       :  %6s" % dps.s_ovp())
-				# print("s_ocp       :  %6s" % dps.s_ocp())
-				# print("s_opp       :  %6s" % dps.s_opp())
-				# print("b_led2      :  %6s" % dps.b_led2())
-				# print("m_pre       :  %6s" % dps.m_pre())
-				# print("s_ini       :  %6s" % dps.s_ini())
-				
-			elif route == "vset":
-				value = input("Enter value: ")
-				dps.voltage_set('w', float(value))
-			elif route == "iset":
-				value = input("Enter value: ")
-				dps.current_set('w', float(value))
-			elif route == "lock":
-				value = input("Enter value: ")
-				dps.lock('w', float(value))
-			elif route == "on":
-				dps.onoff('w', 1)
-			elif route == "off":
-				dps.onoff('w', 0)		
-			# elif route == "bled":
-				# value = input("Enter value: ")
-				# dps.b_led('w', float(value))		
-			# elif route == "sovp":
-				# value = input("Enter value: ")
-				# dps.s_ovp('w', float(value))
-			# elif route == "socp":
-				# value = input("Enter value: ")
-				# dps.s_ocp('w', float(value))
-			# elif route == "sopp":
-				# value = input("Enter value: ")
-				# dps.s_opp('w', float(value))	
-			# elif route == "sini":
-				# value = input("Enter value: ")
-				# dps.s_ini('w', float(value))
-			elif route == "m":	
-				for i in dir(dps):
-					print(i)
-			elif route == "a":	
-				dps.action_csv_file('dps-control-Book1.csv')
-			else:
-				pass
+	if False:
+		dps = Dps5005(ser, limits)
+		try:
+			while True:
+				route = input("Enter command: ")
+				if route == "q":
+					quit()
+				elif route == "r":
+					for reg_addr, block_size in [(0, 40), (0x50, 15), (0x60, 15), (0x70, 15)]:
+						try:
+							values, raw_values, value_dict = dps.read_all(reg_addr, block_size=block_size)
+							print(    f"Address [hex] |  Raw  | Value |    Check | Meaning")
+							for i, value in enumerate(values):
+								addr = reg_addr+i
+								meaning = limits.reg_name.get(addr) or ""
+								try:
+									sanity_check = value_dict[meaning] if meaning else "     "
+								except KeyError:
+									sanity_check = 'incomplete'
+								try:
+									sanity_check_str = f"{sanity_check:8}"
+								except Exception:
+									sanity_check_str = f"{sanity_check}"
+								print(f"      {addr:02} [{addr:02x}] | {raw_values[i]:5} | {value:5} | {sanity_check_str} | {meaning}")
+						except AttributeError:
+							print(traceback.format_exc())
+				elif route == "dump": # test accessability of the registers, try to read all values
+					reg_addr = 0
+					block_size=1
+					valid_addresses = []
+					Invalid_addresses = []
+					address_overview = ''
+					address_overview_2 = ''
+					while reg_addr <= 2**8-block_size:
+						try:
+							print(reg_addr)
+							values, raw_values, value_dict = dps.read_all(reg_addr, block_size=block_size)
+							for i, value in enumerate(values):
+								addr = reg_addr+i
+								valid_addresses.append(reg_addr+i) 
+							address_overview += (''.join([("." if x else "0") for x in raw_values]))
+							address_overview_2 += (''.join([f"{x:6} " for x in raw_values]))
+						except AttributeError:
+							Invalid_addresses.append(reg_addr) # for blocksizes > 1 this is not correct
+							x = ("x"*block_size)
+							address_overview += x
+							_x = ("     _ "*block_size)
+							address_overview_2 += _x
+						if (reg_addr +block_size) %16 == 0:
+							address_overview += "\n"
+							address_overview_2 += "\n"
+						reg_addr += block_size
+					print(f"{valid_addresses=}")
+					print(f"{Invalid_addresses=}")
+					print("overview")
+					print(address_overview)
+					print(address_overview_2)
+				elif route == "write":
+					value = [23.47, 1.23]
+					dps.write_voltage_current('w', value)
+				elif route == "vset":
+					value = input("Enter value: ")
+					dps.voltage_set('w', float(value))
+				elif route == "iset":
+					value = input("Enter value: ")
+					dps.current_set('w', float(value))
+				elif route == "lock":
+					value = input("Enter value: ")
+					dps.lock('w', float(value))
+				elif route == "on":
+					dps.onoff('w', 1)
+				elif route == "off":
+					dps.onoff('w', 0)
+				elif route == "m":	
+					for i in dir(dps):
+						print(i)
+				elif route == "a":	
+					dps.action_csv_file('dps-control-Book1.csv')
+				else:
+					pass
 
-	except KeyboardInterrupt:  	# Ctrl+C pressed, so...
-		print("close")
-	except Exception as e:
-		print('Error', e.args)
-		print(traceback.format_exc())
+		except KeyboardInterrupt:  	# Ctrl+C pressed, so...
+			print("close")
+		except Exception as e:
+			print('Error', e.args)
+			print(traceback.format_exc())
+			print()
+			print("Trying to turn off the power supply due to the error.")
+			dps.onoff('w', 0)
+		finally:
+			quit()
+	else:
+		instr = ModbusInstrumentWrapper(ser, limits)
+
 		print()
-		print("Trying to turn off the power supply due to the error.")
-		dps.onoff('w', 0)
-	finally:
-		quit()
+		print("testing read_value")
+		for key in limits.reg:
+			value = instr.read_value(key)
+			print(key, value)
+
+		print()
+		print("testing read_values")
+		keys = []
+		for keys in instr.key_groups:
+			values = instr.read_values(keys)
+			for i, key in enumerate(keys):
+				print(key, values[key])
+			print(' --')
