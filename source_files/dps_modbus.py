@@ -353,7 +353,7 @@ if __name__ == '__main__':
 			# elif route == "sini":
 				# value = input("Enter value: ")
 				# dps.s_ini('w', float(value))
-			# elif route == "m":	
+			elif route == "m":	
 				for i in dir(dps):
 					print(i)
 			elif route == "a":	
@@ -363,6 +363,11 @@ if __name__ == '__main__':
 
 	except KeyboardInterrupt:  	# Ctrl+C pressed, so...
 		print("close")
-	finally:
+	except Exception as e:
+		print('Error', e.args)
+		print(traceback.format_exc())
+		print()
+		print("Trying to turn off the power supply due to the error.")
 		dps.onoff('w', 0)
+	finally:
 		quit()
