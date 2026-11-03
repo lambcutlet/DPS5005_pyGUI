@@ -21,6 +21,7 @@ class Import_limits:
 		self.reg_name = {}
 		self.decimals = {}
 		self.encoding = {}
+		self.limits = {}
 		self._read_file(filename)
 		self._read_file(self.device_config)
 		
@@ -48,6 +49,10 @@ class Import_limits:
 					case "Decimals":
 						self.decimals[key] = int(value)
 						exec("self.%s = %s" % ('decimals_'+key, value))
+					case "Limits":
+						self.limits[key] = self._parse_float_list(value)
+						if len(self.limits[key]) != 2:
+							raise Exception(f"Limits need to consist of a min and max value (e.g.: vset: 0.0, 6.5). Found values {self.limits[key]} for key {key}")
 					case "SectionOne" | "SectionTwo" | "SectionThree":
 						exec("self.%s = %s" % (key, value))
 					case _:
@@ -62,6 +67,10 @@ class Import_limits:
 				return int_list
 			except:
 				return str_list
+	def _parse_float_list(self, value):
+		str_list = [x.strip() for x in value.split(',')]
+		float_list = [float(x) for x in str_list]
+		return float_list
 
 
 '''
@@ -99,26 +108,35 @@ class Serial_modbus:
 	def write_block(self, reg_addr, value):
 		self.instrument.write_registers(reg_addr, value)
 
-class ModbusInstrumentWrapper:
-	def __init__(self, serial_modbus, device_properties):
-		self.serial_data = serial_modbus
-		self.limits = device_properties
-		self.preset = None
+class LabeledModbusInstrument:
+	def __init__(self, device_properties, port, addr, baud_rate, timeout = 0.5, byte_size = 8):
+		self.instrument = minimalmodbus.Instrument(
+			serial.Serial(port, baud_rate, byte_size, serial.PARITY_NONE, 1,  timeout),
+			addr,
+			minimalmodbus.MODE_RTU
+		)
+		time.sleep(0.016) # ensure silent interval before any message is sent
+		# see https://minimalmodbus.readthedocs.io/en/stable/serialcommunication.html?highlight=silent
+		# temporary solution until https://github.com/pyhys/minimalmodbus/issues/141 is resolved
+		# even with the proposed solution, this delay increases the success rate of the first message from 82% to 98% for the XY-SK120
 
+		self.dev = device_properties
+
+		self.preset = None
 		self._generate_keys_in_readable_groups()
 	
 	def read_addresses(self, addresses):
 		# TODO: avoid too big blocks and forbidden addresses
 		_min = min(addresses)
 		count = max(addresses) - _min +1
-		values = self.serial_data.read_block(_min, count)
+		values = self.instrument.read_registers(_min, count)
 		return [values[addr - _min] for addr in addresses]
 
 	def decode_words(self, words, key):
 		value = None
 		if len(words) > 1:
 			match key:
-				case key if (key in limits.decimals) or ((len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals)):
+				case key if (key in self.dev.decimals) or ((len(key) > 7) and(key[:7] == "preset_") and (key[7:] in self.dev.decimals)):
 					value = 0
 					for i, word in enumerate(words):
 						value += word<<(16*i)
@@ -132,14 +150,14 @@ class ModbusInstrumentWrapper:
 		match key:
 			case "version":
 				value = str(value)
-				for i in range(self.limits.decimals_version):
+				for i in range(self.dev.decimals["version"]):
 					n = i*2+1
 					value = value[:-n] + '.' + value[-n:]	# version
 			case key if key in limits.decimals:
-				value = value/float(10**self.limits.decimals[key])
+				value = value/float(10**self.dev.decimals[key])
 			case key if (len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals): # use the decimals places defined for <name> on preset_<name>
 				_key = key[7:]
-				value = value/float(10**self.limits.decimals[_key])
+				value = value/float(10**self.dev.decimals[_key])
 			case key if key in limits.encoding:
 				value = limits.encoding[key][value]
 			case "model":
@@ -149,41 +167,40 @@ class ModbusInstrumentWrapper:
 
 	
 	def encode_value(self, key, value):
-		word = None
-
-		#encode
 		match key:
 			case "version":
 				raise NotImplementedError("encode "+key);
 			case key if key in limits.decimals:
-				value = int(value*10**self.limits.decimals[key])
+				value = int(value*10**self.dev.decimals[key])
 			case key if (len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals): # use the decimals places defined for <name> on preset_<name>
 				_key = key[7:]
-				value = int(value*10**self.limits.decimals[_key])
+				value = int(value*10**self.dev.decimals[_key])
 			case key if key in limits.encoding:
 				raise NotImplementedError("encode " + key)
 			case "model":
 				raise NotImplementedError("encode " + key)
-		
-		#check limits
-		raise NotImplementedError("check limits")
 
-		#TODO: raise error on multi-word variables?
+		words = []
+		#TODO: implement multi-word variables
+		if isinstance(self.dev.reg[key], list):
+			raise NotImplementedError("setting multi-word parameters is not supported yet")
+		else:
+			words = [int(value)]
 
-		return word
+		return words
 
 	def get_addresses(self, key, reevaluate_preset = True):
-		part_of_settable_preset = (len(key) > 7) and (key[:7] == "preset_") and ("preset" in self.limits.reg)
+		part_of_settable_preset = (len(key) > 7) and (key[:7] == "preset_") and ("preset" in self.dev.reg)
 		if part_of_settable_preset and ((self.preset == None) or reevaluate_preset):
-			preset_addr = self.limits.reg["preset"]
-			self.preset = self.serial_data.read(preset_addr, 0)
+			preset_addr = self.dev.reg["preset"]
+			self.preset = self.instrument.read_register(preset_addr, 0)
 
-		addresses = self.limits.reg[key]
+		addresses = self.dev.reg[key]
 		if isinstance(addresses, int):
 			addresses = [addresses]
 
 		if part_of_settable_preset:
-			addresses = [address + self.preset*self.limits.preset_offset for address in addresses]
+			addresses = [address + self.preset*self.dev.preset_offset for address in addresses]
 		return addresses
 
 	def read_value(self, key):
@@ -212,7 +229,7 @@ class ModbusInstrumentWrapper:
 		return value_dict
 
 	def _generate_keys_in_readable_groups(self, avoid_duplicates = True):
-		sorted_addrs = sorted(self.limits.reg_name.keys())
+		sorted_addrs = sorted(self.dev.reg_name.keys())
 
 		self.key_groups = []
 		current_group = []
@@ -220,10 +237,10 @@ class ModbusInstrumentWrapper:
 			if (i == 0) or (current_group[-1] +1 == address):
 				current_group.append(address)
 			else:
-				current_group_keys = [self.limits.reg_name[x] for x in current_group]
+				current_group_keys = [self.dev.reg_name[x] for x in current_group]
 				self.key_groups.append(current_group_keys)
 				current_group = [address]
-		current_group_keys = [self.limits.reg_name[x] for x in current_group]
+		current_group_keys = [self.dev.reg_name[x] for x in current_group]
 		self.key_groups.append(current_group_keys)
 
 		#remove duplicates
@@ -231,10 +248,25 @@ class ModbusInstrumentWrapper:
 
 		return self.key_groups
 	
+	def check_limits(self, key, value):
+		if not key in self.dev.limits:
+			raise Exception("Acceptable range is unknown (incomplete device configuration).")
+		min, max = self.dev.limits[key]
+		if (value < min) or (value > max):
+			raise Exception(f"Value {value} is outside the allowed range ({min} .. {max}).")
+
+	def write_value(self, key, value):
+		self.check_limits(key, value)
+
+		words = self.encode_value(key, value)
+
+		addresses = self.get_addresses(key)
+		if len(addresses) == 1:
+			self.instrument.write_register(addresses[0], words[0], 0)
 
 
 class Dps5005:
-#--- new ---
+  #--- new ---
 	def __init__(self, ser, limits):
 		self.serial_data = ser
 		self.limits = limits
@@ -380,7 +412,7 @@ class Dps5005:
 	def write_all(self, reg_addr=0, value=0):	# write block
 		self.functions(reg_addr, 0, 'w', value)
 		
-#---
+  #---
 	
 
 
@@ -470,6 +502,7 @@ class Dps5005:
 			return
 		except:
 			print("Failed to load file.")
+
 '''
 This file can operate independently controlling the DPS via the commandline however the GUI is much simpler.
 '''
@@ -487,10 +520,10 @@ if __name__ == '__main__':
 		dps = Dps5005(ser, limits)
 		try:
 			while True:
-				route = input("Enter command: ")
-				if route == "q":
+				command = input("Enter command: ")
+				if command == "q":
 					quit()
-				elif route == "r":
+				elif command == "r":
 					for reg_addr, block_size in [(0, 40), (0x50, 15), (0x60, 15), (0x70, 15)]:
 						try:
 							values, raw_values, value_dict = dps.read_all(reg_addr, block_size=block_size)
@@ -509,7 +542,7 @@ if __name__ == '__main__':
 								print(f"      {addr:02} [{addr:02x}] | {raw_values[i]:5} | {value:5} | {sanity_check_str} | {meaning}")
 						except AttributeError:
 							print(traceback.format_exc())
-				elif route == "dump": # test accessability of the registers, try to read all values
+				elif command == "dump": # test accessability of the registers, try to read all values
 					reg_addr = 0
 					block_size=1
 					valid_addresses = []
@@ -540,26 +573,26 @@ if __name__ == '__main__':
 					print("overview")
 					print(address_overview)
 					print(address_overview_2)
-				elif route == "write":
+				elif command == "write":
 					value = [23.47, 1.23]
 					dps.write_voltage_current('w', value)
-				elif route == "vset":
+				elif command == "vset":
 					value = input("Enter value: ")
 					dps.voltage_set('w', float(value))
-				elif route == "iset":
+				elif command == "iset":
 					value = input("Enter value: ")
 					dps.current_set('w', float(value))
-				elif route == "lock":
+				elif command == "lock":
 					value = input("Enter value: ")
 					dps.lock('w', float(value))
-				elif route == "on":
+				elif command == "on":
 					dps.onoff('w', 1)
-				elif route == "off":
+				elif command == "off":
 					dps.onoff('w', 0)
-				elif route == "m":	
+				elif command == "m":	
 					for i in dir(dps):
 						print(i)
-				elif route == "a":	
+				elif command == "a":	
 					dps.action_csv_file('dps-control-Book1.csv')
 				else:
 					pass
@@ -575,19 +608,38 @@ if __name__ == '__main__':
 		finally:
 			quit()
 	else:
-		instr = ModbusInstrumentWrapper(ser, limits)
+		instr = LabeledModbusInstrument(limits, limits.port_set, 1, 115200)
+		try:
+			while True:
+				command = input("Enter command: ")
+				match command:
+					case "q":
+						quit()
+					case "r":
+						for keys in instr.key_groups:
+							values = instr.read_values(keys)
+							for i, key in enumerate(keys):
+								print(f"{key:>22}: {values[key]}")
+							print(' --')
+					case "w":
+						key = input(' Enter the name of the variable: ')
+						value = input(' Enter the value: ')
+						value = float(value)
+						instr.write_value(key, value)
+					case _:
+						print("Unknown command. Press Ctrl+C or enter q to quit.")
 
-		print()
-		print("testing read_value")
-		for key in limits.reg:
-			value = instr.read_value(key)
-			print(key, value)
-
-		print()
-		print("testing read_values")
-		keys = []
-		for keys in instr.key_groups:
-			values = instr.read_values(keys)
-			for i, key in enumerate(keys):
-				print(key, values[key])
-			print(' --')
+		except KeyboardInterrupt:  	# Ctrl+C pressed, so...
+			print("close")
+		except Exception as e:
+			#print('Error', e.args)
+			print(traceback.format_exc())
+			print()
+			print("Trying to turn off the power supply due to the error...")
+			try:
+				instr.write_value('on', 0)
+				print("Turned off")
+			except Exception:
+				print("Failed to turn off")
+		finally:
+			quit()
