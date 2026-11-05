@@ -17,7 +17,7 @@ Cross-platform PyQt5 desktop application for monitoring and controlling power su
 <img src="images/current_ui.jpg">
 
 ## Supported devices
-You need to set the config file `device_<model>.ini` for your device in `config.ini`.
+You need to set the config file `device_<model>.toml` for your device in `config.ini`.
 
 Devices that have been tested and work:
 
@@ -28,7 +28,7 @@ Devices that are similar are easy to adapt to if the use the same modbus registe
 - XY-SK6015L
 - DPS5005
 
-To add support for your device, create a new `device_<model>.ini` file for your device and select it in `source_files/config.ini`
+To add support for your device, create a new `device_<model>.toml` file for your device and select it by inserting the filename in `source_files/config.ini`
 
 
 
@@ -49,7 +49,7 @@ are only helper scripts. They are not the application itself.
 
 The real application entrypoint is:
 
-- `source_files/dps_GUI_program.py`
+- `source_files/pps_GUI_program.py`
 
 ## Requirements
 
@@ -81,7 +81,7 @@ If you do not want to use a virtual environment:
 
 ```bash
 python3 -m pip install -r source_files/requirements.txt
-python3 source_files/dps_GUI_program.py
+python3 source_files/pps_GUI_program.py
 ```
 
 ## Serial connection
@@ -128,7 +128,7 @@ Example files are included:
 Main runtime configuration lives in:
 
 - `source_files/config.ini`
-- `source_files/device_<model>.ini`
+- `source_files/device_<model>.toml`
 
 This file controls:
 
@@ -141,9 +141,9 @@ That file is also the main place to adapt the app for similar `DPSxxxx`-style de
 
 ## Repository layout
 
-- `source_files/dps_GUI_program.py`: main GUI application
+- `source_files/pps_GUI_program.py`: main GUI application
 - `source_files/dps_modbus.py`: Modbus communication and device wrapper
-- `source_files/dps_GUI.ui`: main Qt Designer UI file
+- `source_files/pps_GUI.ui`: main Qt Designer UI file
 - `source_files/connection_dialog.ui`: connection dialog UI
 - `source_files/requirements.txt`: Python dependencies
 - `XYGUI.spec`: PyInstaller spec file
@@ -167,7 +167,7 @@ To build on Linux:
 
 You are responsible for safe PSU, battery, and wiring limits.
 
-The application applies configured bounds from `device_<model>.ini`, but those bounds still need to match your actual hardware and charging scenario.
+The application applies configured bounds from `device_<model>.toml`, but those bounds still need to match your actual hardware and charging scenario.
 
 ---
 
@@ -205,7 +205,7 @@ The application applies configured bounds from `device_<model>.ini`, but those b
 
 Основна точка входу:
 
-- `source_files/dps_GUI_program.py`
+- `source_files/pps_GUI_program.py`
 
 ## Залежності
 
@@ -237,7 +237,7 @@ The application applies configured bounds from `device_<model>.ini`, but those b
 
 ```bash
 python3 -m pip install -r source_files/requirements.txt
-python3 source_files/dps_GUI_program.py
+python3 source_files/pps_GUI_program.py
 ```
 
 ## Підключення по serial
@@ -284,7 +284,7 @@ python3 source_files/dps_GUI_program.py
 Основний runtime-конфіг лежить тут:
 
 - `source_files/config.ini`
-- `source_files/device_<model>.ini`
+- `source_files/device_<model>.toml`
 
 У цьому файлі задаються:
 
@@ -297,9 +297,9 @@ python3 source_files/dps_GUI_program.py
 
 ## Структура репозиторію
 
-- `source_files/dps_GUI_program.py`: головний GUI-застосунок
+- `source_files/pps_GUI_program.py`: головний GUI-застосунок
 - `source_files/dps_modbus.py`: Modbus-комунікація і обгортка над пристроєм
-- `source_files/dps_GUI.ui`: головний інтерфейс із Qt Designer
+- `source_files/pps_GUI.ui`: головний інтерфейс із Qt Designer
 - `source_files/connection_dialog.ui`: діалог підключення
 - `source_files/requirements.txt`: Python-залежності
 - `XYGUI.spec`: файл збірки PyInstaller
@@ -323,4 +323,4 @@ python3 source_files/dps_GUI_program.py
 
 Ви самі відповідаєте за безпечні значення для блоку живлення, акумуляторів і підключення.
 
-Програма використовує обмеження з `device<model>.ini`, але вони все одно мають відповідати вашому реальному обладнанню і сценарію використання.
+Програма використовує обмеження з `device<model>.toml`, але вони все одно мають відповідати вашому реальному обладнанню і сценарію використання.

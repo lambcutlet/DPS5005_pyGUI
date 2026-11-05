@@ -9,8 +9,8 @@ import datetime
 from pathlib import Path
 from serial.tools import list_ports
 
-from dps_modbus import ProgrammablePowerSupply
-from dps_modbus import Import_config
+from pps_modbus import ProgrammablePowerSupply
+from pps_modbus import Import_config
 from labeled_modbus_instrument import LabeledModbusInstrument, LMInstrumentProperties
 
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QRunnable, QThreadPool, QTimer, QThread, QCoreApplication, QObject, QMutex, Qt
@@ -139,7 +139,7 @@ class pps_GUI(QMainWindow):
 		pg.setConfigOption('background', self.config.background_colour)
 			
 		super(pps_GUI,self).__init__()
-		loadUi(app_path('dps_GUI.ui'), self)
+		loadUi(app_path('pps_GUI.ui'), self)
 		if not hasattr(self, 'pushButton_connect') and hasattr(self, 'pushButton_connect_2'):
 			self.pushButton_connect = self.pushButton_connect_2
 		

@@ -11,7 +11,7 @@ if not defined PYTHON_EXE goto :python_not_found
 call "%PYTHON_EXE%" -c "import serial, minimalmodbus, PyQt5, pyqtgraph" >nul 2>nul
 if errorlevel 1 goto :missing_deps
 
-call "%PYTHON_EXE%" dps_GUI_program.py
+call "%PYTHON_EXE%" pps_GUI_program.py
 goto :end
 
 :find_python

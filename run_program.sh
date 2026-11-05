@@ -34,4 +34,4 @@ if ! "$PYTHON_EXE" -c "import serial, minimalmodbus, PyQt5, pyqtgraph, numpy" >/
   exit 1
 fi
 
-exec "$PYTHON_EXE" dps_GUI_program.py
+exec "$PYTHON_EXE" pps_GUI_program.py

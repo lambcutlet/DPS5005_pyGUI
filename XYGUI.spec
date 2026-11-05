@@ -8,15 +8,15 @@ SOURCE_DIR = ROOT / "source_files"
 
 
 a = Analysis(
-    [str(SOURCE_DIR / 'dps_GUI_program.py')],
+    [str(SOURCE_DIR / 'pps_GUI_program.py')],
     pathex=[str(ROOT)],
     binaries=[],
     datas=[
-        (str(SOURCE_DIR / 'dps_GUI.ui'), '.'),
+        (str(SOURCE_DIR / 'pps_GUI.ui'), '.'),
         (str(SOURCE_DIR / 'connection_dialog.ui'), '.'),
         (str(SOURCE_DIR / 'config.ini'), '.'),
         (str(SOURCE_DIR / 'device_dps5005.ini'), '.'),
-        (str(SOURCE_DIR / 'device_xy-sk120.ini'), '.'),
+        (str(SOURCE_DIR / 'device_xy-sk120.toml'), '.'),
         (str(SOURCE_DIR / 'icon'), 'icon'),
     ],
     hiddenimports=[],
