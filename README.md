@@ -29,8 +29,7 @@ Devices that are similar are easy to adapt to if the use the same modbus registe
 - DPS5005
 
 To add support for your device, create a new `device_<model>.toml` file for your device and select it by inserting the filename in `source_files/config.ini`
-
-
+To find out or confirm the correctness of the register addresses and encodings, use the command `python pps_modbus.py` in the folder `source_files` and enter `dump` for a memory dump or `r` to get the labele registers only (much faster, returns the value of the active preset).
 
 ## Project status
 
@@ -134,6 +133,7 @@ This file controls:
 
 - min/max values written to the device
 - decimal precision used for register conversion
+- register addresses
 - graph colors and line widths
 - optional fixed serial port
 

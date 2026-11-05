@@ -58,6 +58,7 @@ baudrate = [9600, 14400, 19200, 38400, 56000, 576000, 115200, 2400, 4800]
 
 [Registers]
 # Addresses of the registers and their names. Multi-word variables can be specified by using commas (ensure the correct order).
+# The prefix preset_ means that there are multiple registers with a fixed distance ([Other] -> preset_offset) with the same meaning.
 # parameter = <address>
 # parameter = [<address0>, <address1>, ... ]
 vset =       0
@@ -108,9 +109,6 @@ preset_on_after_boot = 93
   #other name = ini
 
 [Other]
-
-preset_start =       80 
-    # start of the first preset
 preset_offset =      16 
     # offset to the next preset
 preset_count =       10

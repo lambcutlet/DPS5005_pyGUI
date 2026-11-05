@@ -109,13 +109,13 @@ if __name__ == '__main__':
 					data = {}
 					data_addr = {}
 					illegal_address = []
-					address_overview_small = '  0123456789abcdef (column)\n'
+					address_overview_small = 'row+0123456789abcdef (row+column = address)\n'
 					address_overview_detail = ''
 					print("reading addresses...")
 					length = 256+16
 					for addr in range(length):
 						if addr %16 == 0:
-							address_overview_small += hex(int(addr/16))[2:]+'|'
+							address_overview_small += f'{hex(int(addr))[2:]:>3}|'
 						try:
 							data_raw[addr] = instr.instrument.read_register(addr)
 							#print(' read', addr, data_raw[addr])
