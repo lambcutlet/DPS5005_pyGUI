@@ -5,29 +5,23 @@ import csv
 import traceback
 import numpy as np
 
-from labeled_modbus_instrument import LabeledModbusInstrument
+from labeled_modbus_instrument import LabeledModbusInstrument, LMInstrumentProperties
 
 try:
 	import ConfigParser
 except ImportError:
 	import configparser as ConfigParser
 
+import tomllib
+
 ''' 
-import the system limit thresholds from the *.ini file.
-having a separate file allows simple modification for other versions of DPS supplies.
-these limits prevent the program from issuing silly values.
+import the configuration from a *.ini config file.
 '''
-class Import_limits:
+class Import_config(dict):
 	def __init__(self, filename):
-		self.reg = {}
-		self.reg_name = {}
-		self.decimals = {}
-		self.encoding = {}
-		self.limits = {}
-		self._read_file(filename)
-		self._read_file(self.device_config)
-		
-	def _read_file(self, filename):
+		self._read_config_file(filename)
+
+	def _read_config_file(self, filename):
 		Config = ConfigParser.ConfigParser()
 		found_files = Config.read(filename)
 		if len(found_files) == 0:
@@ -38,322 +32,50 @@ class Import_limits:
 			for key in Config.options(section):
 				value = Config.get(section, key)
 				match section:
-					case "Registers":
-						value = self._parse_int_or_list(value)
-						self.reg[key] = value
-						try:
-							self.reg_name[value] = key
-						except:
-							for v in value:
-								self.reg_name[v] = key
-					case "Encoding":
-						self.encoding[key] = self._parse_int_or_list(value)
-					case "Decimals":
-						self.decimals[key] = int(value)
-						exec("self.%s = %s" % ('decimals_'+key, value))
-					case "Limits":
-						self.limits[key] = self._parse_float_list(value)
-						if len(self.limits[key]) != 2:
-							raise Exception(f"Limits need to consist of a min and max value (e.g.: vset: 0.0, 6.5). Found values {self.limits[key]} for key {key}")
 					case "SectionOne" | "SectionTwo" | "SectionThree":
 						exec("self.%s = %s" % (key, value))
 					case _:
 						pass
-	def _parse_int_or_list(self, value):
-		try:
-			return int(value)
-		except:
-			str_list = [x.strip() for x in value.split(',')]
-			try:
-				int_list = [int(x) for x in str_list]
-				return int_list
-			except:
-				return str_list
-	def _parse_float_list(self, value):
-		str_list = [x.strip() for x in value.split(',')]
-		float_list = [float(x) for x in str_list]
-		return float_list
 
-
-'''
-# original inspiration for this came from here:
-# DPS3005 MODBUS Example By Luke (www.ls-homeprojects.co.uk) 
-#
-# Requires minimalmodbus library from: https://github.com/pyhys/minimalmodbus
-'''		
-class Serial_modbus:
-	def __init__(self, port, addr, baud_rate, byte_size, timeout = 0.5):
-		self.instrument = minimalmodbus.Instrument(
-			serial.Serial(port, baud_rate, byte_size, serial.PARITY_NONE, 1,  timeout),
-			addr,
-			minimalmodbus.MODE_RTU
-		)
-
-		time.sleep(0.016) # ensure silent interval before any message is sent
-		# see https://minimalmodbus.readthedocs.io/en/stable/serialcommunication.html?highlight=silent
-		# temporary solution until https://github.com/pyhys/minimalmodbus/issues/141 is resolved
-		# even with the proposed solution, this delay increases the success rate of the first message from 82% to 98% for the XY-SK120
-
-	def close(self):
-		self.instrument.serial.close()
-		pass
-
-	def read(self, reg_addr, decimal_places):
-		return self.instrument.read_register(reg_addr, decimal_places)
-		
-	def read_block(self, reg_addr, size_of_block):
-		return self.instrument.read_registers(reg_addr, size_of_block)
-
-	def write(self, reg_addr, value, decimal_places):
-		self.instrument.write_register(reg_addr, value, decimal_places) # register, value, No_of_decimal_places
-	
-	def write_block(self, reg_addr, value):
-		self.instrument.write_registers(reg_addr, value)
-
-
-class Dps5005:
+class ProgrammablePowerSupply:
   #--- new ---
-	def __init__(self, ser, limits):
-		self.serial_data = ser
-		self.limits = limits
-		
-	def voltage_set(self, RWaction='r', value=0.0):	# R/W
-		return self.function(limits.reg['vset'], self.limits.decimals_vset, RWaction, value, self.limits.voltage_set_max, self.limits.voltage_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
+	def __init__(self, labeledModbusInstrument):
+		self.instr = labeledModbusInstrument
 
-	def current_set(self, RWaction='r', value=0.0):	# R/W
-		return self.function(limits.reg['iset'], self.limits.decimals_iset, RWaction, value, self.limits.current_set_max, self.limits.current_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value 
-
-	def voltage(self):	# R
-		return self.function(limits.reg['v'], self.limits.decimals_v) 
-
-	def current(self):	# R
-		return self.function(limits.reg['i'], self.limits.decimals_i)
-
-	def power(self):	# R
-		return self.function(limits.reg['power'], self.limits.decimals_power)
-
-	def voltage_in(self):	# R
-		return self.function(limits.reg['vin'], self.limits.decimals_vin)
-
-	def lock(self, RWaction='r', value=0):	# R/W
-		return self.function(limits.reg['lock'], 0, RWaction, value, self.limits.lock_set_max, self.limits.lock_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-
-	def protect(self):	# R
-		return self.function(limits.reg['protect'], 0)
-
-	def cv_cc(self):	# R
-		return self.function(limits.reg['cv_cc'], 0)
-
-	def onoff(self, RWaction='r', value=0):	# R/W
-		return self.function(limits.reg['on'], 0, RWaction, value, self.limits.onoff_set_max, self.limits.onoff_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-		
-	def b_led(self, RWaction='r', value=0):	# R/W
-		return self.function(limits.reg['backlight'], 0, RWaction, value, self.limits.b_led_set_max, self.limits.b_led_set_min) # reg_addr, decimal_places, RWaction, value, max_value, min_value
-
-	def model(self):	# R
-		return self.function(limits.reg['model'], 0)
-
-	def version(self):	# R
-		version = str(self.function(limits.reg['version'], 0))
-		for i in range(self.limits.decimals_version):
-			n = i*2+1
-			version = version[:-n] + '.' + version[-n:]	# version
-		return version
-
-	def read_all(self, reg_addr = 0x00, block_size = 30):	# Read data as a block, much faster than individual reads
-		data_raw = self.functions(reg_addr, num_of_addr=block_size, RWaction = 'r') # reg_addr, number of bytes, RWaction, value
-		
-		#TODO remove data variable (needs refactoring of dependencies)
-		data = data_raw.copy()
-		try:
-			data[0] = data_raw[0] / float(10**self.limits.decimals_vset)	# voltage_set
-			data[1] = data_raw[1] / float(10**self.limits.decimals_iset)	# current_set
-			data[2] = data_raw[2] / float(10**self.limits.decimals_v)		# voltage
-			data[3] = data_raw[3] / float(10**self.limits.decimals_i)		# current
-			data[4] = data_raw[4] / float(10**self.limits.decimals_power)	# power
-			data[5] = data_raw[5] / float(10**self.limits.decimals_vin)	 	# voltage_in
-			data[13] = data_raw[13] / float(10**self.limits.decimals_temp_internal)	# temperature internal
-			data[8] = data_raw[8] / float(10**self.limits.decimals_energy)	# energy
-
-			data[19] = "°F" if data_raw[19] else "°C"
-
-			data[23] = str(data_raw[23])
-			for i in range(self.limits.decimals_version):
-				n = i*2+1
-				data[23] = data[23][:-n] + '.' + data[23][-n:]	# version
-		except Exception:
-			print(traceback.format_exc())
-
-		data_dict = {}
-		for key in limits.reg:
-			index = limits.reg.get(key)
-			value = None
-			if isinstance(index, list):
-				multi_word = True
-				words = []
-				try:
-					for i in index:
-						addr = i-reg_addr
-						assert addr >= 0
-						words.append(data_raw[addr])
-				except IndexError, AssertionError:
-					continue
-				match key:
-					case key if key in limits.decimals:
-						value = 0
-						for i, word in enumerate(words):
-							value += word<<(16*i)
-						value = value/float(10**self.limits.decimals[key])
-					case "time":
-						value = datetime.timedelta(hours = words[2], minutes = words[1], seconds = words[0])
-
-						
-			elif isinstance(index, int):
-				try:
-					addr = index-reg_addr
-					assert addr >= 0
-					value = data_raw[addr]
-				except IndexError, AssertionError:
-					continue
-				match key:
-					case "version":
-						value = str(value)
-						for i in range(self.limits.decimals_version):
-							n = i*2+1
-							value = value[:-n] + '.' + value[-n:]	# version
-					case key if key in limits.decimals:
-						value = value/float(10**self.limits.decimals[key])
-					case key if (len(key) > 7) and(key[:7] == "preset_") and (key[7:] in limits.decimals):
-						_key = key[7:]
-						value = value/float(10**self.limits.decimals[_key])
-					case key if key in limits.encoding:
-						value = limits.encoding[key][value]
-					case "temp_unit":
-						"°F" if value else "°C"
-					case "model":
-						if int(value) in limits.model_numbers:
-							value = limits.model_name
-			data_dict[key] = value
-			#print(reg_addr, index, key, data_dict[key])
-
-		for i, value in enumerate(data_raw):
-			key = limits.reg_name.get(i)
-			
-		return data, data_raw, data_dict
-	
-	
-
-	def write_voltage_current(self, RWaction='r', value=0):	# write voltage & current as a block
-		reg_addr = 0x00 
-		# added safety limits - any excursion results in zero
-		if value[0] > self.limits.voltage_set_max or value[0] < self.limits.voltage_set_min: 
-			value[0] = 0
-		value[0] = int(value[0] * float(10**self.limits.decimals_v))	#100.0	# voltage
-		if value[1] > self.limits.current_set_max or value[1] < self.limits.current_set_min: 
-			value[1] = 0
-		value[1] = int(value[1] * float(10**self.limits.decimals_i))	#1000.0	# current
-		
-		self.functions(reg_addr, 0, 'w', value)
-		
-	def write_all(self, reg_addr=0, value=0):	# write block
-		self.functions(reg_addr, 0, 'w', value)
-		
-  #---
-	
-
-
-	def function(self, reg_addr=0, decimal_places=0, RWaction='r', value=0.0, max_value=0, min_value=0):
-		a = False
-		if value > max_value or value < min_value: 
-			value = 0.0
-		if RWaction != 'w':
-			try:
-				a = self.serial_data.read(reg_addr, decimal_places)
-			except IOError:
-				print("Failed to read from instrument")
-		else:
-			try:
-				self.serial_data.write(reg_addr, value, decimal_places) # register, value, No_of_decimal_places
-			except IOError:
-				print("Failed to write to instrument")
-		return(a)
-	
-	def functions(self, reg_addr=0, num_of_addr=0, RWaction='r', value=0):
-		a = False
-		if RWaction != 'w':
-			try:
-				a = self.serial_data.read_block(reg_addr, num_of_addr)
-			except IOError:
-				print("Failed to read block from instrument")
-		else:
-			try:
-				self.serial_data.write_block(reg_addr, value)
-			except IOError:
-				print("Failed to write block to instrument")
-		return(a)
-	
-	def delay(self, value):
-		global time_old
-		value = float(value)
-		if value == 0.0:
-			time_old = time.time()
-
-		while True:
-			time_interval = time.time() - time_old
-			if time_interval >= value:
-				time_old = time.time()
-				break
-			time.sleep(0.01)
+	def read_all(self):	# Read data as continuous blocks, much faster than individual reads
+		result_dict = {}
+		self.instr.preset = None
+		for keys in self.instr.key_groups:
+			block_dict = self.instr.read_values(keys, reevaluate_preset=False)
+			if 'preset' in block_dict:
+				self.instr.preset = block_dict['preset']
+				#print('set preset from block')
+			result_dict = result_dict | block_dict
+		#print("pps.read_all -", result_dict)
+		return result_dict
 
 	def check_model(self, verbose = True):
-		model = self.model()
-		model_hex = hex(model)[2:]
-		expected_model_strings = [str(number) for number in self.limits.model_numbers]
-		match = model_hex in expected_model_strings
+		model = self.instr.read_value('model')
+		model_is_a_match = (model == self.instr.p.model['name'])
 		if verbose:
-			if match:
-				print(f"Model number {model_hex} matches with config file for Model {self.limits.model_name}.")
+			if model_is_a_match:
+				print(f"Model number matches with config file for Model {self.instr.p.model['name']}.")
 			else:
-				print(f"Model number {model_hex} is not in the list of expected numbers {self.limits.model_numbers} for the configured model {self.limits.model_name}. Please verify that your configuration is correct.")
-		return match
+				print(f"Model number {model} is not in the list of expected numbers {self.instr.p.model['numbers']} for the configured model {self.instr.p.model['name']}. Please verify that your configuration is correct.")
+		return model_is_a_match
 
-	
-	def action_csv_file(self, filename='sample.csv', value=0):
-		try:
-			with open(filename, 'r') as f:
-				csvReader = csv.reader(f)#, delimiter=',')	# reads file
-				next(csvReader, None)						# skips header
-				data_list = list(csvReader)
-				print(data_list)
-			# initialise dps state
-				self.voltage_set('w', float(0.0))			# set voltage to zero
-				self.current_set('w', float(0.0))			# set current to zero
-				self.onoff('w', 1)							# enable output
-				total_time = 0
-			# calculate test time
-				for row in data_list:
-					total_time += float(row[0])
-				print("Test Time: %5.1fseconds" % (total_time))
-			# perform test
-				for row in data_list:
-					value0 = float(row[0])
-					value1 = float(row[1])
-					value2 = float(row[2])
-					print(" Step_time: %5.1fs, Voltage: %5.2fV, Current: %5.3fA" % (value0, value1, value2))
-					self.voltage_set('w', value1)
-					self.current_set('w', value2)
-					self.delay(value0)
-			self.onoff('w', 0)							# disable output
-			print("Complete!")
-			return
-		except:
-			print("Failed to load file.")
+	def str_format_decimals(self, value_dict, min_width = 5):
+		result = {}
+		for key, value in value_dict.items():
+			if (key in self.instr.p.decimals) and (not isinstance(value, str)):
+				result[key] = f"{value_dict[key]:{min_width}.{self.instr.p.decimals[key]}f}"
+		return result
 
 '''
 This file can operate independently controlling the DPS via the commandline however the GUI is much simpler.
 '''
 if __name__ == '__main__':
-	limits = Import_limits("config.ini")
+	limits = Import_config("config.ini")
 
 	try:
 		print("Serial port: "+limits.port_set)
@@ -363,31 +85,12 @@ if __name__ == '__main__':
 		print(e.args)
 		quit()
 	if False:
-		dps = Dps5005(ser, limits)
+		dps = Dps5005(ser, self.limits)
 		try:
 			while True:
 				command = input("Enter command: ")
 				if command == "q":
 					quit()
-				elif command == "r":
-					for reg_addr, block_size in [(0, 40), (0x50, 15), (0x60, 15), (0x70, 15)]:
-						try:
-							values, raw_values, value_dict = dps.read_all(reg_addr, block_size=block_size)
-							print(    f"Address [hex] |  Raw  | Value |    Check | Meaning")
-							for i, value in enumerate(values):
-								addr = reg_addr+i
-								meaning = limits.reg_name.get(addr) or ""
-								try:
-									sanity_check = value_dict[meaning] if meaning else "     "
-								except KeyError:
-									sanity_check = 'incomplete'
-								try:
-									sanity_check_str = f"{sanity_check:8}"
-								except Exception:
-									sanity_check_str = f"{sanity_check}"
-								print(f"      {addr:02} [{addr:02x}] | {raw_values[i]:5} | {value:5} | {sanity_check_str} | {meaning}")
-						except AttributeError:
-							print(traceback.format_exc())
 				elif command == "dump": # test accessability of the registers, try to read all values
 					reg_addr = 0
 					block_size=1
@@ -422,24 +125,9 @@ if __name__ == '__main__':
 				elif command == "write":
 					value = [23.47, 1.23]
 					dps.write_voltage_current('w', value)
-				elif command == "vset":
-					value = input("Enter value: ")
-					dps.voltage_set('w', float(value))
-				elif command == "iset":
-					value = input("Enter value: ")
-					dps.current_set('w', float(value))
-				elif command == "lock":
-					value = input("Enter value: ")
-					dps.lock('w', float(value))
-				elif command == "on":
-					dps.onoff('w', 1)
-				elif command == "off":
-					dps.onoff('w', 0)
 				elif command == "m":	
 					for i in dir(dps):
 						print(i)
-				elif command == "a":	
-					dps.action_csv_file('dps-control-Book1.csv')
 				else:
 					pass
 
@@ -454,7 +142,8 @@ if __name__ == '__main__':
 		finally:
 			quit()
 	else:
-		instr = LabeledModbusInstrument(limits, limits.port_set, 1, 115200)
+		prop = LMInstrumentProperties(limits.device_config)
+		instr = LabeledModbusInstrument(prop, limits.port_set, 1, 115200)
 		try:
 			while True:
 				command = input("Enter command: ")

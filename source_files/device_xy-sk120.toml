@@ -1,0 +1,119 @@
+# This TOML file defines the addresses, encodings, and parameter limits for a given modbus device.
+# This file may be copied and adapted for other devices.
+
+[Model]
+name = "XY-SK120"
+numbers = [22873]
+
+[Limits]
+#This limits which values can be written to the device.
+#The limits are only effective if the amount of decimal places and all register addresses are defined correctly.
+#Syntax: parameter = [<min>, <max>]
+vset = [0.0, 36.5]
+iset = [0.0, 6.1]
+
+on = [0, 1]
+lock = [0, 1]
+temp_unit = [0, 1]
+on_after_boot = [0, 1]
+backlight = [1, 5]
+
+lvp = [5.5, 38.0]
+ovp = [0, 38.0]
+ocp = [0, 6.2]
+opp = [0, 150]
+
+# maybe the 9999 maximum only applies to the 4 digit display?
+maximum_charge = [0, 9.999]
+maximum_energy = [0, 99.99]
+
+[Decimals]
+# amount of decimal places for each register which uses floats.
+# Registers which use the prefix preset_<name> don't need to be specified separately from <name> if the amount of decimal places is the same for both.
+vset = 2
+iset = 3
+v = 2
+i = 3
+power = 2
+energy = 3
+maximum_energy = 2
+charge = 3
+maximum_charge = 3
+vin = 2
+temp_internal = 1
+ovp = 2
+lvp = 2 
+ocp = 3
+opp = 1
+power_set = 1
+version = 2
+
+[Encoding]
+# Define look-up tables for value meanings
+# If the value n is read from a device, the meaning will be the n-th item in the corresponding list below.
+# Syntax: parameter = [<item 0>, <item 1>, ... ]
+temp_unit = ['°C', '°F']
+baudrate = [9600, 14400, 19200, 38400, 56000, 576000, 115200, 2400, 4800]
+
+
+[Registers]
+# Addresses of the registers and their names. Multi-word variables can be specified by using commas (ensure the correct order).
+# parameter = <address>
+# parameter = [<address0>, <address1>, ... ]
+vset =       0
+iset =       1
+v =          2
+i =          3
+power =      4
+vin =        5
+charge =     [6,7]
+energy =     [8,9]
+time =       [12, 11, 10]
+temp_internal = 13
+temp_ext =   14
+lock =       15
+protect =    16
+cv_cc =      17
+on =         18
+temp_unit =  19
+backlight =  20
+sleep =      21
+model =      22
+version =    23
+modbus_address =   24
+baudrate =         25
+temp_int_offset =  26
+temp_ext_offset =  27
+buzzer =           28
+preset =           29
+device =           30
+  #device status?
+MPPT_Enable =      31
+MPPT_Coefficient = 32
+battery_full_current = 33
+constant_power_mode = 34
+power_set =        35
+
+preset_vset =        80
+preset_iset =        81
+preset_lvp =         82
+preset_ovp =         83
+preset_ocp =         84
+preset_opp =         85
+preset_max_duration =    [87, 86]
+preset_maximum_charge =  [88, 89]
+preset_maximum_energy =  [90, 91]
+preset_otp =         92
+preset_on_after_boot = 93
+  #other name = ini
+
+[Other]
+
+preset_start =       80 
+    # start of the first preset
+preset_offset =      16 
+    # offset to the next preset
+preset_count =       10
+    # amount of presets
+
+resistance_calibration_offset = 0.0349
