@@ -77,104 +77,111 @@ This file can operate independently controlling the DPS via the commandline howe
 if __name__ == '__main__':
 	limits = Import_config("config.ini")
 
+	prop = LMInstrumentProperties(limits.device_config)
 	try:
 		print("Serial port: "+limits.port_set)
-		ser = Serial_modbus(limits.port_set, 1, 115200, 8)
+		modbus_addr = 1
+		instr = LabeledModbusInstrument(prop, limits.port_set, modbus_addr, 115200)
 	except Exception as e:
-		print(f"Could not open the serial port '{limits.port_set}'.")
+		print(f"Could not open the instrument on serial port '{limits.port_set}' at Modbus address {modbus_addr}.")
 		print(e.args)
 		quit()
-	if False:
-		dps = Dps5005(ser, self.limits)
-		try:
-			while True:
-				command = input("Enter command: ")
-				if command == "q":
+	try:
+		print('Available commands: r (read values), dump (memory dump, test all addresses), w (write value)')
+		while True:
+			command = input("Enter command: ")
+			match command:
+				case "q":
 					quit()
-				elif command == "dump": # test accessability of the registers, try to read all values
-					reg_addr = 0
-					block_size=1
-					valid_addresses = []
-					Invalid_addresses = []
-					address_overview = ''
-					address_overview_2 = ''
-					while reg_addr <= 2**8-block_size:
+				case "r":
+					for keys in instr.key_groups:
+						values = instr.read_values(keys)
+						for i, key in enumerate(keys):
+							print(f"{key:>22}: {values[key]}")
+						print(' --')
+				case "w":
+					key = input(' Enter the name of the variable: ')
+					value = input(' Enter the value: ')
+					value = float(value)
+					instr.write_value(key, value)
+				case "dump":
+					data_raw = {}
+					data = {}
+					data_addr = {}
+					illegal_address = []
+					address_overview_small = '  0123456789abcdef (column)\n'
+					address_overview_detail = ''
+					print("reading addresses...")
+					length = 256+16
+					for addr in range(length):
+						if addr %16 == 0:
+							address_overview_small += hex(int(addr/16))[2:]+'|'
 						try:
-							print(reg_addr)
-							values, raw_values, value_dict = dps.read_all(reg_addr, block_size=block_size)
-							for i, value in enumerate(values):
-								addr = reg_addr+i
-								valid_addresses.append(reg_addr+i) 
-							address_overview += (''.join([("." if x else "0") for x in raw_values]))
-							address_overview_2 += (''.join([f"{x:6} " for x in raw_values]))
-						except AttributeError:
-							Invalid_addresses.append(reg_addr) # for blocksizes > 1 this is not correct
-							x = ("x"*block_size)
-							address_overview += x
-							_x = ("     _ "*block_size)
-							address_overview_2 += _x
-						if (reg_addr +block_size) %16 == 0:
-							address_overview += "\n"
-							address_overview_2 += "\n"
-						reg_addr += block_size
-					print(f"{valid_addresses=}")
-					print(f"{Invalid_addresses=}")
-					print("overview")
-					print(address_overview)
-					print(address_overview_2)
-				elif command == "write":
-					value = [23.47, 1.23]
-					dps.write_voltage_current('w', value)
-				elif command == "m":	
-					for i in dir(dps):
-						print(i)
-				else:
-					pass
+							data_raw[addr] = instr.instrument.read_register(addr)
+							#print(' read', addr, data_raw[addr])
+							address_overview_small += '.'
+							address_overview_detail += f"{data_raw[addr]:6} "
+						except minimalmodbus.IllegalRequestError:
+							data_raw[addr] = 'x'
+							address_overview_small += 'x'
+							address_overview_detail += '     _ '
+							illegal_address.append(addr)
+						if (addr +1) %16 == 0:
+							address_overview_small += "\n"
+							address_overview_detail += "\n"
+							print(f" {addr+1}/{length}")
+					for key, addrs in instr.p.reg.items():
+						if isinstance(addrs, int):
+							addrs = [addrs]
+						all_values_present = True
+						for addr in addrs:
+							if data_raw.get(addr) in (None, 'x'):
+								all_values_present = False
+								break
+						if not all_values_present:
+							continue
 
-		except KeyboardInterrupt:  	# Ctrl+C pressed, so...
-			print("close")
-		except Exception as e:
-			print('Error', e.args)
-			print(traceback.format_exc())
-			print()
-			print("Trying to turn off the power supply due to the error.")
-			dps.onoff('w', 0)
-		finally:
-			quit()
-	else:
-		prop = LMInstrumentProperties(limits.device_config)
-		instr = LabeledModbusInstrument(prop, limits.port_set, 1, 115200)
-		try:
-			while True:
-				command = input("Enter command: ")
-				match command:
-					case "q":
-						quit()
-					case "r":
-						for keys in instr.key_groups:
-							values = instr.read_values(keys)
-							for i, key in enumerate(keys):
-								print(f"{key:>22}: {values[key]}")
-							print(' --')
-					case "w":
-						key = input(' Enter the name of the variable: ')
-						value = input(' Enter the value: ')
-						value = float(value)
-						instr.write_value(key, value)
-					case _:
-						print("Unknown command. Press Ctrl+C or enter q to quit.")
+						words = [data_raw[i] for i in addrs]
+						value = instr.decode_words(words, key)
+						data[key] = value
+						for addr in addrs:
+							data_addr[addr] = value
+					
+					print()
+					print("Register Overview (16 per row, 'x' is invalid, '.' is valid)")
+					print(address_overview_small)
+					print()
+					print("Illegal addresses:")
+					print(illegal_address)
+					print()
+					print("Registers - detailed view ('_' is invalid)")
+					print(address_overview_detail)
+					print()
 
-		except KeyboardInterrupt:  	# Ctrl+C pressed, so...
-			print("close")
-		except Exception as e:
-			#print('Error', e.args)
-			print(traceback.format_exc())
-			print()
-			print("Trying to turn off the power supply due to the error...")
-			try:
-				instr.write_value('on', 0)
-				print("Turned off")
-			except Exception:
-				print("Failed to turn off")
-		finally:
-			quit()
+					print('Register labels and interpreted values (only the first presets is resolved here)')
+					print('[addr|hex]    raw |            label |  value')
+					print('---------------------------------------------')
+					for i in range(length):
+						label = instr.p.reg_name.get(i)
+						if label == None:
+							label=''
+						try:
+							interpreted_data = f"{data_addr.get(i):>6}"
+						except:
+							if data_addr.get(i) == None:
+								interpreted_data = ''
+							else:
+								interpreted_data = str(data_addr.get(i))
+						print(f"[{i:4}|{hex(i)[2:]:>3}] {data_raw[i]:>6} | {label:>16} | {interpreted_data}")
+						
+				case _:
+					print("Unknown command. Press Ctrl+C or enter q to quit.")
+
+	except KeyboardInterrupt:  	# Ctrl+C pressed, so...
+		print("close")
+	except Exception as e:
+		#print('Error', e.args)
+		print(traceback.format_exc())
+		print()
+	finally:
+		quit()
